@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Voxel Arena - AI Weapons</title>
+<link rel="stylesheet" href="/src/styles.css" />
+</head>
+<body>
+
+<div id="crosshair"></div>
+<div id="weapon-name"></div>
+<div id="hud">WASD move | Mouse aim locomotion | Hold click fire | T forge weapon</div>
+
+<!-- Screen flash overlay -->
+<div id="screen-flash"></div>
+
+<!-- Weapon Forge -->
+<div id="forge-overlay">
+  <div id="forge-box">
+    <h2>Weapon Forge</h2>
+    <textarea id="forge-input" placeholder="Describe ANY weapon... e.g. 'a black hole cannon that sucks enemies in' or 'bouncing laser that splits on impact'"></textarea>
+    <button id="forge-btn">Forge Weapon</button>
+    <div id="forge-status"></div>
+    <div id="forge-error"></div>
+  </div>
+</div>
+
+<script type="module" src="/src/main.js"></script>
+</body>
+</html>
+
+

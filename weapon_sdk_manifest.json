@@ -1,0 +1,641 @@
+{
+  "manifestVersion": 1,
+  "sdkId": "weapon-sdk-v1-draft",
+  "generatedFrom": {
+    "helperInventory": "src/weaponSdk/index.js",
+    "helperImplementations": [
+      "src/weaponSdk/targeting.js",
+      "src/weaponSdk/damage.js",
+      "src/weaponSdk/status.js",
+      "src/weaponSdk/force.js",
+      "src/weaponSdk/visuals.js",
+      "src/weaponSdk/timing.js"
+    ],
+    "specDoc": "weapon_sdk_v1.md"
+  },
+  "exposure": {
+    "ctxNamespace": "ctx.sdk",
+    "ctxFlatHelpers": true,
+    "flatCollisionPolicy": "flatten only non-conflicting helper names"
+  },
+  "helperCount": 24,
+  "helperNames": [
+    "findEnemiesInRadius",
+    "findClosestEnemy",
+    "findChainTargets",
+    "findLineHits",
+    "findEnemiesInLine",
+    "damageEnemy",
+    "damageRadius",
+    "damageCone",
+    "damageBeam",
+    "applyStatus",
+    "applyStatusRadius",
+    "applyStatusCone",
+    "applyForceToEnemy",
+    "applyForceCone",
+    "dampEnemiesInRadius",
+    "spawnBeam",
+    "spawnBolt",
+    "spawnPulseRing",
+    "spawnZoneAura",
+    "spawnTelegraphCone",
+    "spawnImpactBurst",
+    "channel",
+    "spawnZone",
+    "spawnBeamTick"
+  ],
+  "globalGuidance": {
+    "particleBurstSizeUnits": {
+      "description": "ctx.burstParticles / ctx.spawnImpactBurst size uses point-size-like render units, not world units",
+      "typicalVisibleRange": [2, 6],
+      "commonBadValues": [0.05, 0.08, 0.12]
+    },
+    "beamEndpointCoupling": {
+      "description": "For non-piercing beams/rays, compute hits first and draw the beam to the resolved hit point rather than full range",
+      "recommendedHelpers": ["findLineHits", "spawnBeam"]
+    },
+    "freezeWeapons": {
+      "preferredStatusCalls": ["enemy.freeze(seconds)", "ctx.applyStatus(enemy, { freeze: seconds })", "ctx.applyStatusCone(...)", "ctx.applyStatusRadius(...)"],
+      "avoid": ["using counter-forces to fake freezing"]
+    }
+  },
+  "commonRepairRules": [
+    {
+      "id": "spawnBeam_object_arg_to_positional",
+      "whenHelper": "spawnBeam",
+      "badPattern": "ctx.spawnBeam({ start, end, ...opts })",
+      "rewriteHint": "ctx.spawnBeam(start, end, opts)"
+    },
+    {
+      "id": "spawnImpactBurst_object_arg_to_positional",
+      "whenHelper": "spawnImpactBurst",
+      "badPattern": "ctx.spawnImpactBurst({ position, ...opts })",
+      "rewriteHint": "ctx.spawnImpactBurst(position, opts)"
+    },
+    {
+      "id": "findLineHits_radius_to_width",
+      "whenHelper": "findLineHits",
+      "badPattern": "opts.radius",
+      "rewriteHint": "use opts.width"
+    },
+    {
+      "id": "findLineHits_distance_field_to_t",
+      "whenHelper": "findLineHits",
+      "badPattern": "hit.distance",
+      "rewriteHint": "use hit.t"
+    },
+    {
+      "id": "applyStatus_freeze_type_duration_to_freeze_seconds",
+      "whenHelper": "applyStatus",
+      "badPattern": "{ type: 'freeze', duration: 5 }",
+      "rewriteHint": "{ freeze: 5 }"
+    },
+    {
+      "id": "damageEnemy_amount_to_damage",
+      "whenHelper": "damageEnemy",
+      "badPattern": "ctx.damageEnemy(enemy, { amount: n })",
+      "rewriteHint": "ctx.damageEnemy(enemy, { damage: n }) or ctx.damageEnemy(enemy, n)"
+    },
+    {
+      "id": "spawnBeam_lifetime_to_life",
+      "whenHelper": "spawnBeam",
+      "badPattern": "opts.lifetime",
+      "rewriteHint": "use opts.life"
+    },
+    {
+      "id": "findLineHits_sort_t_to_along",
+      "whenHelper": "findLineHits",
+      "badPattern": "sortBy: 't'",
+      "rewriteHint": "use sortBy: 'along' (or omit sortBy)"
+    }
+  ],
+  "helpers": {
+    "findEnemiesInRadius": {
+      "category": "targeting",
+      "ctxPaths": ["ctx.findEnemiesInRadius", "ctx.sdk.findEnemiesInRadius"],
+      "signature": "findEnemiesInRadius(center, { radius=8, max, sortBy='distance' }) -> enemy[]",
+      "returns": {
+        "type": "array",
+        "item": "enemy wrapper"
+      },
+      "options": {
+        "radius": "number >= 0",
+        "max": "integer limit (optional)",
+        "sortBy": ["distance", "nearest", "farthest", "lowestHp", "hp"]
+      },
+      "notes": [
+        "Sorts before applying max",
+        "Distance is full 3D distance to enemy position/mesh.position"
+      ]
+    },
+    "findClosestEnemy": {
+      "category": "targeting",
+      "ctxPaths": ["ctx.findClosestEnemy", "ctx.sdk.findClosestEnemy"],
+      "signature": "findClosestEnemy(point, { maxRange=Infinity }) -> enemy | null",
+      "returns": {
+        "type": "enemy_or_null"
+      },
+      "options": {
+        "maxRange": "number"
+      },
+      "notes": [
+        "Internally uses findEnemiesInRadius(point, { radius: maxRange, max: 1 })"
+      ]
+    },
+    "findChainTargets": {
+      "category": "targeting",
+      "ctxPaths": ["ctx.findChainTargets", "ctx.sdk.findChainTargets"],
+      "signature": "findChainTargets(startEnemyOrPoint, { jumpRadius=8, maxJumps=4, fromDirection }) -> enemy[]",
+      "returns": {
+        "type": "array",
+        "item": "enemy wrapper"
+      },
+      "options": {
+        "jumpRadius": "number > 0",
+        "maxJumps": "integer >= 0",
+        "fromDirection": "Vector3-like (optional directional preference for first hop)"
+      },
+      "notes": [
+        "If starting from an enemy wrapper, that enemy is included first",
+        "Chain greedily picks nearest next enemy within jumpRadius"
+      ]
+    },
+    "findLineHits": {
+      "category": "targeting",
+      "ctxPaths": ["ctx.findLineHits", "ctx.sdk.findLineHits"],
+      "signature": "findLineHits(origin, direction, { range=20, width=1, max, sortBy='along' }) -> [{ enemy, t, distToLine, point }]",
+      "returns": {
+        "type": "array",
+        "item": {
+          "enemy": "enemy wrapper",
+          "t": "distance along line from origin",
+          "distToLine": "perpendicular distance from enemy center to line",
+          "point": "closest point on line segment (Vector3)"
+        }
+      },
+      "options": {
+        "range": "number >= 0",
+        "width": "number >= 0 (line radius)",
+        "max": "integer limit (optional)",
+        "sortBy": ["along", "distance", "nearest", "farthest", "lowestHp", "hp", "distToLine"]
+      },
+      "notes": [
+        "Uses full 3D distance to enemy center; if beam origin is elevated, width may need to be larger",
+        "distance/nearest are aliases for nearest along-line t ordering",
+        "Best helper for beam endpoint coupling (use hit.point or hit.t)"
+      ],
+      "commonMistakes": [
+        "Using { radius } instead of { width }",
+        "Reading hit.distance instead of hit.t",
+        "Using sortBy: 't' instead of 'along'",
+        "Setting width too small for elevated beam origins"
+      ]
+    },
+    "findEnemiesInLine": {
+      "category": "targeting",
+      "ctxPaths": ["ctx.findEnemiesInLine", "ctx.sdk.findEnemiesInLine"],
+      "signature": "findEnemiesInLine(origin, direction, { range=20, width=1, max, sortBy }) -> enemy[]",
+      "returns": {
+        "type": "array",
+        "item": "enemy wrapper"
+      },
+      "options": {
+        "range": "number >= 0",
+        "width": "number >= 0",
+        "max": "integer limit (optional)",
+        "sortBy": ["along", "distance", "nearest", "farthest", "lowestHp", "hp", "distToLine"]
+      },
+      "notes": [
+        "Delegates to findLineHits and strips metadata",
+        "Use findLineHits instead when beam endpoint or nearest hit distance matters"
+      ]
+    },
+    "damageEnemy": {
+      "category": "damage",
+      "ctxPaths": ["ctx.damageEnemy", "ctx.sdk.damageEnemy"],
+      "signature": "damageEnemy(enemy, { damage }) OR damageEnemy(enemy, number) -> appliedDamageNumber",
+      "returns": {
+        "type": "number",
+        "description": "applied damage amount (0 if invalid/no-op)"
+      },
+      "options": {
+        "damage": "number >= 0"
+      },
+      "commonMistakes": [
+        "Using { amount } instead of { damage }",
+        "Passing unrelated fields like type; they are ignored by the SDK wrapper"
+      ]
+    },
+    "damageRadius": {
+      "category": "damage",
+      "ctxPaths": ["ctx.damageRadius", "ctx.sdk.damageRadius"],
+      "signature": "damageRadius(center, { radius=6, damage=10, falloff='linear', max, sortBy }) -> { count, totalDamage, targets }",
+      "returns": {
+        "type": "object",
+        "fields": {
+          "count": "number",
+          "totalDamage": "number",
+          "targets": "enemy[]"
+        }
+      },
+      "options": {
+        "radius": "number > 0",
+        "damage": "number >= 0",
+        "falloff": ["none", "linear", "quadratic", "smooth"],
+        "max": "integer limit",
+        "sortBy": ["distance", "nearest", "farthest", "lowestHp", "hp"]
+      }
+    },
+    "damageCone": {
+      "category": "damage",
+      "ctxPaths": ["ctx.damageCone", "ctx.sdk.damageCone"],
+      "signature": "damageCone(origin, direction, { range=12, angleDeg=22, damage=8, falloff='linear', max, sortBy }) -> { count, totalDamage, targets }",
+      "returns": {
+        "type": "object",
+        "fields": {
+          "count": "number",
+          "totalDamage": "number",
+          "targets": "enemy[]"
+        }
+      },
+      "options": {
+        "range": "number > 0",
+        "angleDeg": "number",
+        "damage": "number >= 0",
+        "falloff": ["none", "linear", "quadratic", "smooth"]
+      }
+    },
+    "damageBeam": {
+      "category": "damage",
+      "ctxPaths": ["ctx.damageBeam", "ctx.sdk.damageBeam"],
+      "signature": "damageBeam(origin, direction, { range=18, width=1, damage=10, falloff='none', max, sortBy }) -> { count, totalDamage, targets }",
+      "returns": {
+        "type": "object",
+        "fields": {
+          "count": "number",
+          "totalDamage": "number",
+          "targets": "enemy[]"
+        }
+      },
+      "options": {
+        "range": "number > 0",
+        "width": "number >= 0",
+        "damage": "number >= 0",
+        "falloff": ["none", "linear", "quadratic", "smooth"]
+      },
+      "notes": [
+        "Uses findEnemiesInLine internally and applies falloff by along-line distance"
+      ]
+    },
+    "applyStatus": {
+      "category": "status",
+      "ctxPaths": ["ctx.applyStatus", "ctx.sdk.applyStatus"],
+      "signature": "applyStatus(enemy, { freeze, stun, slow, ignite, slowSeconds, duration, freezeOpts }) -> boolean",
+      "returns": {
+        "type": "boolean",
+        "description": "true if any status was applied"
+      },
+      "options": {
+        "freeze": "number seconds",
+        "stun": "number seconds",
+        "slow": "number multiplier OR { multiplier, seconds }",
+        "ignite": "true for defaults OR object passed to enemy.ignite(...)",
+        "slowSeconds": "fallback duration when slow is numeric",
+        "duration": "fallback duration alias used by slow",
+        "freezeOpts": "passed to enemy.freeze(seconds, opts)"
+      },
+      "commonMistakes": [
+        "Using { type:'freeze', duration:5 } instead of { freeze:5 }",
+        "Using slow as percent integer instead of multiplier 0..1"
+      ]
+    },
+    "applyStatusRadius": {
+      "category": "status",
+      "ctxPaths": ["ctx.applyStatusRadius", "ctx.sdk.applyStatusRadius"],
+      "signature": "applyStatusRadius(center, { radius, freeze, stun, slow, ignite, max, sortBy, ... }) -> { count, targets }",
+      "returns": {
+        "type": "object",
+        "fields": {
+          "count": "number of targets changed",
+          "targets": "enemy[] candidates"
+        }
+      },
+      "notes": [
+        "Uses same status spec keys as applyStatus"
+      ]
+    },
+    "applyStatusCone": {
+      "category": "status",
+      "ctxPaths": ["ctx.applyStatusCone", "ctx.sdk.applyStatusCone"],
+      "signature": "applyStatusCone(origin, direction, { range, angleDeg, freeze, stun, slow, ignite, max, sortBy, ... }) -> { count, targets }",
+      "returns": {
+        "type": "object",
+        "fields": {
+          "count": "number of targets changed",
+          "targets": "enemy[] candidates"
+        }
+      },
+      "notes": [
+        "Uses same status spec keys as applyStatus"
+      ]
+    },
+    "applyForceToEnemy": {
+      "category": "force",
+      "ctxPaths": ["ctx.applyForceToEnemy", "ctx.sdk.applyForceToEnemy"],
+      "signature": "applyForceToEnemy(enemy, { x, y, z, direction, strength, lift, maxMagnitude }) -> Vector3",
+      "returns": {
+        "type": "Vector3",
+        "description": "final force vector applied"
+      },
+      "options": {
+        "x": "number",
+        "y": "number",
+        "z": "number",
+        "direction": "Vector3-like",
+        "strength": "number (adds along normalized direction)",
+        "lift": "number (added to y)",
+        "maxMagnitude": "number > 0 (optional clamp)"
+      },
+      "notes": [
+        "Combines explicit x/y/z with direction+strength if both are provided"
+      ]
+    },
+    "applyForceCone": {
+      "category": "force",
+      "ctxPaths": ["ctx.applyForceCone", "ctx.sdk.applyForceCone"],
+      "signature": "applyForceCone(origin, direction, { range=10, angleDeg=22, strength=8, lift=0, falloff='linear', alignToTarget=false, max, sortBy }) -> { count, targets }",
+      "returns": {
+        "type": "object",
+        "fields": {
+          "count": "number",
+          "targets": "enemy[]"
+        }
+      },
+      "options": {
+        "alignToTarget": "if true, pushes away from origin->target direction; else uses cone direction",
+        "falloff": ["none", "linear", "quadratic", "smooth"]
+      },
+      "notes": [
+        "Good for flamethrower shove / shotgun push / forward gusts"
+      ]
+    },
+    "dampEnemiesInRadius": {
+      "category": "force",
+      "ctxPaths": ["ctx.dampEnemiesInRadius", "ctx.sdk.dampEnemiesInRadius"],
+      "signature": "dampEnemiesInRadius(center, { radius=8, multiplier=0.8, includeY=false, max, sortBy }) -> { count, targets }",
+      "returns": {
+        "type": "object",
+        "fields": {
+          "count": "number",
+          "targets": "enemy[]"
+        }
+      },
+      "options": {
+        "multiplier": "0..1 (velocity damping)"
+      }
+    },
+    "spawnBeam": {
+      "category": "visual",
+      "ctxPaths": ["ctx.spawnBeam", "ctx.sdk.spawnBeam"],
+      "signature": "spawnBeam(start, end, { color=0x66ccff, width=0.1, life=0.12, jitter=0, opacity=0.9, radialSegments=8 }) -> Mesh",
+      "returns": {
+        "type": "THREE.Mesh",
+        "description": "cylinder beam mesh auto-fades/removes itself after life"
+      },
+      "options": {
+        "color": "THREE.Color-compatible (number or CSS color string)",
+        "width": "world units (beam radius)",
+        "life": "seconds",
+        "jitter": "world units random positional jitter per frame",
+        "opacity": "0..1",
+        "radialSegments": "integer >= 3"
+      },
+      "commonMistakes": [
+        "Calling with one object arg instead of (start, end, opts)",
+        "Using opts.lifetime instead of opts.life",
+        "Drawing to full range even for non-piercing beam with earlier hit"
+      ]
+    },
+    "spawnBolt": {
+      "category": "visual",
+      "ctxPaths": ["ctx.spawnBolt", "ctx.sdk.spawnBolt"],
+      "signature": "spawnBolt(start, end, { color=0x9be8ff, life=0.08, segments=8, zigzag=0.35, flicker=false, opacity=0.95 }) -> Line",
+      "returns": {
+        "type": "THREE.Line",
+        "description": "zigzag polyline auto-fades/removes"
+      },
+      "notes": [
+        "Use for lightning arcs, tesla links, electric traps"
+      ]
+    },
+    "spawnPulseRing": {
+      "category": "visual",
+      "ctxPaths": ["ctx.spawnPulseRing", "ctx.sdk.spawnPulseRing"],
+      "signature": "spawnPulseRing(center, { radius=3, color=0xffffff, life=0.25, width=0.25, opacity=0.7, yOffset=0.08 }) -> Mesh",
+      "returns": {
+        "type": "THREE.Mesh"
+      },
+      "notes": [
+        "center may be Vector3-like; helper resolves point refs"
+      ]
+    },
+    "spawnZoneAura": {
+      "category": "visual",
+      "ctxPaths": ["ctx.spawnZoneAura", "ctx.sdk.spawnZoneAura"],
+      "signature": "spawnZoneAura(centerRef, { radius=3, thickness=0.09, color=0x66ccff, life, opacity=0.5, pulse=0.12, spin=0.8, yOffset=0.12 }) -> { object, destroy() }",
+      "returns": {
+        "type": "object",
+        "fields": {
+          "object": "THREE.Mesh",
+          "destroy": "function"
+        }
+      },
+      "notes": [
+        "centerRef may be Vector3-like, object with position/mesh.position, or function returning a point",
+        "If life is omitted, aura persists until destroy()"
+      ]
+    },
+    "spawnTelegraphCone": {
+      "category": "visual",
+      "ctxPaths": ["ctx.spawnTelegraphCone", "ctx.sdk.spawnTelegraphCone"],
+      "signature": "spawnTelegraphCone(origin, direction, { range=10, angleDeg=22, color=0xffaa55, life=0.25, opacity=0.65, yOffset=0.08, segments=18 }) -> Line",
+      "returns": {
+        "type": "THREE.Line"
+      },
+      "notes": [
+        "Useful as pre-fire warning for cone attacks"
+      ]
+    },
+    "spawnImpactBurst": {
+      "category": "visual",
+      "ctxPaths": ["ctx.spawnImpactBurst", "ctx.sdk.spawnImpactBurst"],
+      "signature": "spawnImpactBurst(position, { color=0x88ddff, particles/count=20, speed=8, lifetime=0.3, size=3.5, gravity=0.2, light, lightIntensity=3, lightLife=0.15, lightRange=8, ringRadius, ringLife=0.2, ringWidth=0.35 }) -> { position, light }",
+      "returns": {
+        "type": "object",
+        "fields": {
+          "position": "Vector3",
+          "light": "THREE.PointLight | null"
+        }
+      },
+      "commonMistakes": [
+        "Calling with one object arg instead of (position, opts)",
+        "Using very small size values like 0.1 (particles become nearly invisible)"
+      ],
+      "notes": [
+        "If ringRadius is set, also spawns a pulse ring",
+        "Uses runtime.burstParticles if available"
+      ]
+    },
+    "channel": {
+      "category": "timing",
+      "ctxPaths": ["ctx.channel", "ctx.sdk.channel"],
+      "signature": "channel({ duration=0.5, tick=0, onUpdate, onTick, onEnd }) -> { stop() }",
+      "returns": {
+        "type": "object",
+        "fields": {
+          "stop": "function"
+        }
+      },
+      "notes": [
+        "Requires runtime.onUpdate",
+        "If tick <= 0, onTick is called once at completion (if provided)"
+      ]
+    },
+    "spawnZone": {
+      "category": "timing",
+      "ctxPaths": ["ctx.spawnZone", "ctx.sdk.spawnZone"],
+      "signature": "spawnZone({ center, radius=4, duration=1, tick=0.1, effects, visual, color, onTick, onEnd }) -> { stop(), aura, destroy() }",
+      "returns": {
+        "type": "object",
+        "fields": {
+          "stop": "function (channel stop)",
+          "aura": "zone aura handle or null",
+          "destroy": "function (stop + aura destroy)"
+        }
+      },
+      "effectsSchema": {
+        "damage": "forwarded to damageRadius with same radius",
+        "status": "forwarded to applyStatusRadius with same radius",
+        "radialForce": "forwarded to runtime.applyRadialForce with same radius",
+        "damp": "forwarded to dampEnemiesInRadius with same radius"
+      },
+      "notes": [
+        "Use for black holes, freezing fields, fire pools, stasis zones",
+        "visual may be false to suppress aura"
+      ]
+    },
+    "spawnBeamTick": {
+      "category": "timing",
+      "ctxPaths": ["ctx.spawnBeamTick", "ctx.sdk.spawnBeamTick"],
+      "signature": "spawnBeamTick({ origin, direction, range=16, duration=0.35, tick=0.08, effects, visual, onTick }) -> { stop() }",
+      "returns": {
+        "type": "object",
+        "fields": {
+          "stop": "function"
+        }
+      },
+      "effectsSchema": {
+        "damageBeam": "forwarded to damageBeam",
+        "damageCone": "forwarded to damageCone",
+        "statusCone": "forwarded to applyStatusCone",
+        "forceCone": "forwarded to applyForceCone"
+      },
+      "notes": [
+        "Visual beam endpoint is fixed to range per tick; if stop-on-first-hit endpoint coupling is required, compute with findLineHits manually",
+        "origin and direction may be values or functions (re-evaluated each tick)"
+      ]
+    }
+  },
+  "archetypeExamples": [
+    {
+      "id": "freeze_beam_non_piercing",
+      "intentSpec": {
+        "archetype": "freeze_beam",
+        "delivery": "beam",
+        "visual_motif": "icy cyan beam with bright core",
+        "pierce": false,
+        "stop_on_first_hit": true,
+        "range": 45,
+        "targeting": { "shape": "line", "width_or_angle": 1.2 },
+        "effects": { "damage": 6, "freeze": 5 }
+      },
+      "recommendedSdkSequence": [
+        "hits = ctx.findLineHits(origin, dir, { range: 45, width: 1.2, max: 1, sortBy: 'along' })",
+        "end = hits.length ? hits[0].point : origin + dir * range",
+        "ctx.spawnBeam(origin, end, { color, width, life, jitter, opacity })",
+        "if hit: ctx.damageEnemy(hit.enemy, { damage: 6 })",
+        "if hit: ctx.applyStatus(hit.enemy, { freeze: 5 })",
+        "if hit: ctx.spawnImpactBurst(hit.point, { particles: 24, size: 3.5 })"
+      ],
+      "failureModesToCheck": [
+        "Using width too small for elevated origin (beam visually passes over enemy center)",
+        "Using hit.t / hit.point incorrectly",
+        "Drawing full-range beam despite stop_on_first_hit"
+      ]
+    },
+    {
+      "id": "freeze_projectile_white_bullet",
+      "intentSpec": {
+        "archetype": "freeze_projectile",
+        "delivery": "projectile",
+        "visual_motif": "white glowing bullet with white trail",
+        "pierce": false,
+        "range": 70,
+        "effects": { "damage": 0, "freeze": 5 }
+      },
+      "recommendedSdkSequence": [
+        "Use core ctx.spawn(...) for projectile movement and ctx.createTrail(...) for trail",
+        "Use custom segment collision in onUpdate OR line test between previous and next positions",
+        "On hit: ctx.applyStatus(enemy, { freeze: 5 }) or enemy.freeze(5)",
+        "On hit: ctx.spawnImpactBurst(hitPos, { color: white/ice, particles: 20-40, size: 3-5 })"
+      ],
+      "notes": [
+        "Projectile delivery is still a core sandbox pattern; SDK mainly helps with impact/status/auxiliary visuals"
+      ]
+    },
+    {
+      "id": "black_hole_zone",
+      "intentSpec": {
+        "archetype": "black_hole_zone",
+        "delivery": "zone",
+        "visual_motif": "dark core + cyan/white gravity aura",
+        "pierce": false,
+        "range": 0,
+        "effects": {
+          "damage": 4,
+          "force": "continuous inward pull + damping"
+        },
+        "timing": {
+          "duration": 2.0,
+          "tick": 0.1
+        }
+      },
+      "recommendedSdkSequence": [
+        "ctx.spawnZone({ center, radius, duration, tick, effects: { radialForce: { mode: 'inward', strength, lift }, damp: { multiplier } }, visual: { color } })",
+        "Optional: effects.damage for chip damage over time",
+        "Optional: effects.status for slow/stun field variants"
+      ],
+      "failureModesToCheck": [
+        "Using ctx.explode() for pull (it always pushes outward)",
+        "Applying force once instead of continuously"
+      ]
+    },
+    {
+      "id": "lightning_chain",
+      "intentSpec": {
+        "archetype": "lightning_chain",
+        "delivery": "chain",
+        "visual_motif": "jagged blue-white bolts chaining between targets",
+        "pierce": true,
+        "effects": { "damage": 8, "stun": 0.25 }
+      },
+      "recommendedSdkSequence": [
+        "startTarget = ctx.findClosestEnemy(origin, { maxRange })",
+        "targets = ctx.findChainTargets(startTarget, { jumpRadius, maxJumps, fromDirection: dir })",
+        "For each link: ctx.spawnBolt(a, b, { segments, zigzag, flicker: true })",
+        "For each target: ctx.damageEnemy(target, { damage }) and ctx.applyStatus(target, { stun: 0.25 })"
+      ]
+    }
+  ]
+}

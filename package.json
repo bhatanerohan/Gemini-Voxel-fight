@@ -1,0 +1,16 @@
+{
+  "name": "car-combat",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build"
+  },
+  "dependencies": {
+    "three": "^0.128.0"
+  },
+  "devDependencies": {
+    "playwright": "^1.58.2",
+    "vite": "^6.0.0"
+  }
+}
