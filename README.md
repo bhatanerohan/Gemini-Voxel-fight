@@ -44,9 +44,9 @@ npm install
 This project reads the key from a local `.env` file.
 
 The repo already includes:
-- [`.env`](./.env)
 - [`.env.example`](./.env.example)
 
+create a `.env` file
 Open `.env` and set:
 
 ```env
