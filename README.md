@@ -107,10 +107,9 @@ Try prompts like these:
 - `a freeze beam that stops on first hit and leaves icy bursts`
 - `a rapid plasma rifle with small blue bolts and light recoil`
 - `a lightning cannon that chains between nearby enemies`
-- `a bouncing laser that ricochets off walls twice`
-- `a gravity hammer blast fired from the arm cannon`
-- `a missile swarm that launches in short bursts`
-- `a flame thrower cone with heavy close-range burn damage`
+- `Pizza`
+- `Arrow`
+- `Homing missile`
 
 ## Project Structure
 
