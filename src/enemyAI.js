@@ -216,5 +216,13 @@ function rangedAI(e, player, allEnemies, dt, slowScale) {
     }
   }
 
+  // Shoot cooldown
+  e.shootCooldown = (e.shootCooldown ?? (1.5 + Math.random())) - dt;
+  const canShoot = dist >= fleeRange && dist <= (e.typeConfig?.attackRange || 25);
+  if (canShoot && e.shootCooldown <= 0) {
+    e.shootCooldown = (e.typeConfig?.attackCooldown || 1.8) * (0.8 + Math.random() * 0.4);
+    e.wantsToShoot = true;
+  }
+
   applySeparation(e, allEnemies, dt, slowScale);
 }

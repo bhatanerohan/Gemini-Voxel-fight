@@ -25,6 +25,7 @@ import { initMutations, updateMutations } from './arenaMutations.js';
 import { initThemeManager, applyThemeInstant, PRESETS, setGameContext } from './themeManager.js';
 import { applyAvatarConfig, updateAvatarEffects, getAvatarConcept, resetAvatar, setAvatarParticlePool } from './avatarBuilder.js';
 import { initSettingsPanel, openSettings, closeSettings, isSettingsOpen, updateGearVisibility } from './settingsPanel.js';
+import { getMouseSensitivity } from './settingsStorage.js';
 import { initThemesTab } from './tabs/themesTab.js';
 import { initWeaponsTab } from './tabs/weaponsTab.js';
 import { initSkinsTab, setSkinsCallbacks } from './tabs/skinsTab.js';
@@ -378,6 +379,12 @@ function refreshRuntimeCombatModifiers() {
 }
 
 function initSkinUi() {
+  const skinPanel = document.getElementById('avatar-skin-ui');
+  const skinTitle = skinPanel?.querySelector('.skin-title');
+  if (skinTitle) {
+    skinTitle.addEventListener('click', () => skinPanel.classList.toggle('collapsed'));
+  }
+
   _skinPresetSelect = document.getElementById('player-skin-preset');
   _skinSuitInput = document.getElementById('player-skin-suit');
   _skinAccentInput = document.getElementById('player-skin-accent');
@@ -929,8 +936,9 @@ function updateAimLocomotion(dt) {
     }
   }
 
-  playerYaw += angleDelta(playerYaw, targetAimYaw) * dampFactor(18, dt);
-  playerAimPitch += (targetAimPitch - playerAimPitch) * dampFactor(18, dt);
+  const aimSharpness = 18 * getMouseSensitivity();
+  playerYaw += angleDelta(playerYaw, targetAimYaw) * dampFactor(aimSharpness, dt);
+  playerAimPitch += (targetAimPitch - playerAimPitch) * dampFactor(aimSharpness, dt);
 }
 
 function animateHumanoid(mesh, dt, horizontalSpeed = 0, { frozen = false, localForward = 0, localRight = 0 } = {}) {
@@ -1177,12 +1185,12 @@ function init() {
   applyThemeInstant(PRESETS.neon);
 
   // ── Settings panel ──
+  initSettingsPanel();
   initThemesTab();
   initWeaponsTab();
   initSkinsTab();
   initAvatarsTab();
   initGraphicsTab();
-  initSettingsPanel();
   setGraphicsSceneRefs(getSceneRefs());
   applyStoredGraphicsSettings(getSceneRefs());
   setSkinsCallbacks({
@@ -1463,6 +1471,7 @@ function init() {
       if (mouseDown) fire();
     }
     if (GameState.phase === 'playing') updateEnemies(dt);
+    updateEnemyProjectiles(dt);
     updateEntities(dt);
     updateTrails(dt);
     updateSandboxTimers(dt);
@@ -1493,8 +1502,17 @@ function init() {
 // HEALTH BARS
 // ══════════════════════════════════════════════════
 function updateHealthBars() {
+  const MAX_BAR_DIST_SQ = 30 * 30;
   for (const e of enemies) {
     if (e.alive === false) continue;
+    const dx = e.pos.x - player.pos.x;
+    const dz = e.pos.z - player.pos.z;
+    const distSq = dx * dx + dz * dz;
+    const visible = distSq <= MAX_BAR_DIST_SQ;
+    if (e.barFill.parentElement) {
+      e.barFill.parentElement.style.display = visible ? '' : 'none';
+    }
+    if (!visible) continue;
     const pct = Math.max(0, e.hp / e.maxHp) * 100;
     if (e._lastPct === pct) continue;
     e._lastPct = pct;
@@ -1545,6 +1563,7 @@ function restartGame() {
   if (overlay) overlay.classList.remove('active');
   for (const e of enemies) {
     e.hp = e.maxHp;
+    e._lastPct = -1;
     e.pos.set((Math.random() - 0.5) * 60, 0.6, (Math.random() - 0.5) * 60);
     e.vel.set(0, 0, 0);
     e.mesh.visible = true;
@@ -1559,6 +1578,9 @@ function restartGame() {
       e.bodyMesh.material.emissiveIntensity = 0;
     }
   }
+  // Clear enemy projectiles
+  for (const p of enemyProjectiles) { scene.remove(p.mesh); p.mesh.material.dispose(); }
+  enemyProjectiles.length = 0;
   // Reset damage mutations
   clearDamageMutations(player.mesh);
   clearMutationCache();
@@ -1861,6 +1883,74 @@ function updateEnemies(dt) {
         }
       }
     }
+
+    // Ranged attack — spawn projectile toward player
+    if (!frozen && !stunned && e.wantsToShoot && e.typeConfig?.projectile) {
+      e.wantsToShoot = false;
+      const proj = e.typeConfig.projectile;
+      const dirX = dx / Math.max(0.001, dist);
+      const dirZ = dz / Math.max(0.001, dist);
+      spawnEnemyProjectile(
+        e.pos.x, e.pos.y + 0.8, e.pos.z,
+        dirX * proj.speed, 0, dirZ * proj.speed,
+        proj.damage, proj.color, proj.size,
+      );
+    }
+  }
+}
+
+// ══════════════════════════════════════════════════
+// ENEMY PROJECTILES
+// ══════════════════════════════════════════════════
+const enemyProjectiles = [];
+const _projGeom = new THREE.SphereGeometry(1, 6, 4);
+
+function spawnEnemyProjectile(x, y, z, vx, vy, vz, damage, color, size) {
+  const mat = new THREE.MeshBasicMaterial({ color });
+  const mesh = new THREE.Mesh(_projGeom, mat);
+  mesh.scale.setScalar(size);
+  mesh.position.set(x, y, z);
+  scene.add(mesh);
+  enemyProjectiles.push({ mesh, vx, vy, vz, damage, age: 0 });
+}
+
+function updateEnemyProjectiles(dt) {
+  for (let i = enemyProjectiles.length - 1; i >= 0; i--) {
+    const p = enemyProjectiles[i];
+    p.age += dt;
+    p.mesh.position.x += p.vx * dt;
+    p.mesh.position.y += p.vy * dt;
+    p.mesh.position.z += p.vz * dt;
+
+    // Remove if too old or out of bounds
+    if (p.age > 5 || Math.abs(p.mesh.position.x) > 55 || Math.abs(p.mesh.position.z) > 55) {
+      scene.remove(p.mesh);
+      p.mesh.material.dispose();
+      enemyProjectiles.splice(i, 1);
+      continue;
+    }
+
+    // Check collision with player
+    const dx = p.mesh.position.x - player.pos.x;
+    const dy = p.mesh.position.y - player.pos.y;
+    const dz = p.mesh.position.z - player.pos.z;
+    const distSq = dx * dx + dy * dy + dz * dz;
+    if (distSq < 1.2) {
+      // Hit player
+      if (player.invulnTimer <= 0 && player.hp > 0) {
+        player.hp -= p.damage;
+        MatchMemory.recordPlayerHit(p.damage, player.hp);
+        playPlayerHit();
+        player.invulnTimer = 0.3;
+        triggerFlash(0.15);
+        setShake(0.3, 0.15);
+        updatePlayerHealthBar();
+        if (player.hp <= 0) playerDeath();
+      }
+      scene.remove(p.mesh);
+      p.mesh.material.dispose();
+      enemyProjectiles.splice(i, 1);
+    }
   }
 }
 
@@ -1876,6 +1966,7 @@ export function respawnEnemy(x, z, hp = 100, typeConfig = null) {
   }
   dead.hp = hp;
   dead.maxHp = hp;
+  dead._lastPct = -1;
   dead.alive = true;
   dead.pos.set(x, 0.6, z);
   dead.vel.set(0, 0, 0);

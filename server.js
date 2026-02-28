@@ -272,20 +272,20 @@ app.post('/gemini/tts', rateLimit, async (req, res) => {
     return res.status(500).json({ error: { message: 'GEMINI_API_KEY not configured on server' } });
   }
 
-  let payload = null;
+  let ttsPayload = null;
   const hasGeminiPayload = Array.isArray(req.body?.contents);
 
   if (hasGeminiPayload) {
-    payload = req.body;
-    payload.generationConfig = payload.generationConfig || {};
-    payload.generationConfig.responseModalities = ['AUDIO'];
-    payload.generationConfig.speechConfig = payload.generationConfig.speechConfig || {};
-    payload.generationConfig.speechConfig.voiceConfig = payload.generationConfig.speechConfig.voiceConfig || {};
-    payload.generationConfig.speechConfig.voiceConfig.prebuiltVoiceConfig =
-      payload.generationConfig.speechConfig.voiceConfig.prebuiltVoiceConfig || {};
+    ttsPayload = req.body;
+    ttsPayload.generationConfig = ttsPayload.generationConfig || {};
+    ttsPayload.generationConfig.responseModalities = ['AUDIO'];
+    ttsPayload.generationConfig.speechConfig = ttsPayload.generationConfig.speechConfig || {};
+    ttsPayload.generationConfig.speechConfig.voiceConfig = ttsPayload.generationConfig.speechConfig.voiceConfig || {};
+    ttsPayload.generationConfig.speechConfig.voiceConfig.prebuiltVoiceConfig =
+      ttsPayload.generationConfig.speechConfig.voiceConfig.prebuiltVoiceConfig || {};
 
-    const voiceRaw = safeString(payload.generationConfig.speechConfig.voiceConfig.prebuiltVoiceConfig.voiceName).trim();
-    payload.generationConfig.speechConfig.voiceConfig.prebuiltVoiceConfig.voiceName =
+    const voiceRaw = safeString(ttsPayload.generationConfig.speechConfig.voiceConfig.prebuiltVoiceConfig.voiceName).trim();
+    ttsPayload.generationConfig.speechConfig.voiceConfig.prebuiltVoiceConfig.voiceName =
       TTS_VOICES.has(voiceRaw) ? voiceRaw : 'Kore';
   } else {
     const text = safeString(req.body?.text).trim();
@@ -316,7 +316,7 @@ app.post('/gemini/tts', rateLimit, async (req, res) => {
         : 'Keep delivery natural.';
 
     const ttsPrompt = `${moodStyle} ${paceStyle} Speak this exact line: "${text}"`;
-    payload = {
+    ttsPayload = {
       contents: [{
         parts: [{ text: ttsPrompt }],
       }],
@@ -338,7 +338,7 @@ app.post('/gemini/tts', rateLimit, async (req, res) => {
         'Content-Type': 'application/json',
         'x-goog-api-key': GEMINI_API_KEY,
       },
-      body: JSON.stringify(payload),
+      body: JSON.stringify(ttsPayload),
     });
 
     if (!upstream.ok) {
@@ -348,8 +348,8 @@ app.post('/gemini/tts', rateLimit, async (req, res) => {
       });
     }
 
-    const payload = await upstream.json().catch(() => null);
-    const parts = payload?.candidates?.[0]?.content?.parts;
+    const ttsResult = await upstream.json().catch(() => null);
+    const parts = ttsResult?.candidates?.[0]?.content?.parts;
     const audioPart = Array.isArray(parts)
       ? parts.find(p => typeof p?.inlineData?.data === 'string' && p.inlineData.data)
       : null;
@@ -366,6 +366,47 @@ app.post('/gemini/tts', rateLimit, async (req, res) => {
   } catch (err) {
     console.error('Gemini TTS proxy error:', err?.message || err);
     return res.status(502).json({ error: { message: 'Failed to reach Gemini TTS API' } });
+  }
+});
+
+app.post('/gemini-tts/models/:model\\:generateContent', rateLimit, async (req, res) => {
+  if (!GEMINI_API_KEY) {
+    return res.status(500).json({ error: { message: 'GEMINI_API_KEY not configured on server' } });
+  }
+
+  const { model } = req.params;
+  if (!model || !model.startsWith('gemini-2.5')) {
+    return res.status(400).json({ error: { message: `Model not allowed: ${model}` } });
+  }
+
+  try {
+    const upstream = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-goog-api-key': GEMINI_API_KEY,
+        },
+        body: JSON.stringify(req.body),
+      }
+    );
+
+    res.status(upstream.status);
+    const ct = upstream.headers.get('content-type');
+    if (ct) res.setHeader('Content-Type', ct);
+
+    const reader = upstream.body.getReader();
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) { res.end(); return; }
+      res.write(value);
+    }
+  } catch (err) {
+    console.error('TTS proxy error:', err.message);
+    if (!res.headersSent) {
+      res.status(502).json({ error: { message: 'Failed to reach Gemini TTS API' } });
+    }
   }
 });
 

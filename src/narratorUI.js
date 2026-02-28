@@ -332,9 +332,19 @@ export function showNarratorLine(text, mood = 'epic', duration = 3500) {
   if (hideTimeout) clearTimeout(hideTimeout);
   if (streamInterval) clearInterval(streamInterval);
 
-  narratorEl.textContent = '';
+  narratorEl.innerHTML = '';
   narratorEl.className = `narrator-overlay narrator-${mood} narrator-show`;
   void speakNarrator(text, mood);
+
+  // Add speaker label
+  const label = document.createElement('span');
+  label.className = 'narrator-label';
+  label.textContent = 'Narrator';
+  narratorEl.appendChild(label);
+
+  // Text node for streamed words
+  const textNode = document.createTextNode('');
+  narratorEl.appendChild(textNode);
 
   // Stream words one at a time
   const words = text.split(/\s+/);
@@ -349,7 +359,7 @@ export function showNarratorLine(text, mood = 'epic', duration = 3500) {
       }, duration);
       return;
     }
-    narratorEl.textContent += (idx > 0 ? ' ' : '') + words[idx];
+    textNode.textContent += (idx > 0 ? ' ' : '') + words[idx];
     idx++;
   }, 120);
 }

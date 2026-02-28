@@ -109,6 +109,7 @@ const DEFAULT_GRAPHICS = {
   fogDensity: null,
   particleDensity: 0.5,
   showFps: false,
+  mouseSensitivity: 1.0,
 };
 
 export function getGraphicsSettings() {
@@ -117,6 +118,11 @@ export function getGraphicsSettings() {
 
 export function saveGraphicsSettings(settings) {
   _write(KEYS.graphics, settings);
+}
+
+export function getMouseSensitivity() {
+  const s = _read(KEYS.graphics);
+  return s?.mouseSensitivity ?? 1.0;
 }
 
 // ── Migration ──

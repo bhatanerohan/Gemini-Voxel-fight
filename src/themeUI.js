@@ -28,7 +28,8 @@ export function initThemeUI() {
     btn.className = 'theme-preset-btn' + (key === 'neon' ? ' active' : '');
     btn.dataset.theme = key;
     btn.textContent = preset.name;
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
       applyTheme(preset);
       _updateActivePreset(key);
       _closePanel();
@@ -53,12 +54,13 @@ export function initThemeUI() {
   _hintInput.maxLength = 60;
   _hintInput.addEventListener('focus', () => { window._blockGameInput = true; });
   _hintInput.addEventListener('blur', () => { window._blockGameInput = false; });
+  _hintInput.addEventListener('keydown', (e) => { e.stopPropagation(); });
   genDiv.appendChild(_hintInput);
 
   _generateBtn = document.createElement('button');
   _generateBtn.id = 'theme-generate-btn';
   _generateBtn.textContent = 'Generate';
-  _generateBtn.addEventListener('click', _onGenerate);
+  _generateBtn.addEventListener('click', (e) => { e.stopPropagation(); _onGenerate(); });
   genDiv.appendChild(_generateBtn);
 
   _panel.appendChild(genDiv);

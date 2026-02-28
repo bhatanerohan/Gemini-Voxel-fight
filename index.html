@@ -32,23 +32,26 @@
 <div id="crosshair"></div>
 <div id="weapon-name"></div>
 <div id="player-level"></div>
-<div id="avatar-skin-ui">
+<div id="avatar-skin-ui" class="collapsed">
   <div class="skin-title">Avatar Skin</div>
-  <div class="skin-row">
-    <label for="player-skin-preset">Preset</label>
-    <select id="player-skin-preset"></select>
+  <div class="skin-body">
+    <div class="skin-row">
+      <label for="player-skin-preset">Preset</label>
+      <select id="player-skin-preset"></select>
+    </div>
+    <div class="skin-colors">
+      <label>Suit <input type="color" id="player-skin-suit" value="#2f7dff" /></label>
+      <label>Accent <input type="color" id="player-skin-accent" value="#9fe1ff" /></label>
+      <label>Skin <input type="color" id="player-skin-tone" value="#f5d0b0" /></label>
+      <label>Visor <input type="color" id="player-skin-visor" value="#0a2038" /></label>
+    </div>
+    <div class="skin-prompt-row">
+      <input id="player-skin-prompt" type="text" placeholder="Type skin idea (e.g. batman)" />
+      <button id="player-skin-apply" type="button">Apply</button>
+    </div>
+    <button id="player-skin-random" type="button">Randomize</button>
+    <div id="player-skin-name"></div>
   </div>
-  <div class="skin-colors">
-    <label>Suit <input type="color" id="player-skin-suit" value="#2f7dff" /></label>
-    <label>Accent <input type="color" id="player-skin-accent" value="#9fe1ff" /></label>
-    <label>Skin <input type="color" id="player-skin-tone" value="#f5d0b0" /></label>
-    <label>Visor <input type="color" id="player-skin-visor" value="#0a2038" /></label>
-  </div>
-  <div class="skin-prompt-row">
-    <input id="player-skin-prompt" type="text" placeholder="Type skin idea (e.g. batman)" />
-    <button id="player-skin-apply" type="button">Apply</button>
-  </div>
-  <button id="player-skin-random" type="button">Randomize</button>
   <div class="narrator-tts-controls">
     <label class="narrator-tts-toggle">
       <input id="narrator-tts-enabled" type="checkbox" />
@@ -62,7 +65,6 @@
       <span id="narrator-tts-rate-label">1.00x</span>
     </div>
   </div>
-  <div id="player-skin-name"></div>
 </div>
 
 <!-- Game HUD -->

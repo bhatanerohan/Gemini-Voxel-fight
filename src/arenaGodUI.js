@@ -19,14 +19,11 @@ export function showGodDialogue(text, tone = 'neutral', duration = 5000) {
   const textEl = document.getElementById('god-text');
   if (!container || !textEl) return;
 
-  // Remove all tone classes, add new one
   TONES.forEach(t => container.classList.remove(t));
   container.classList.add(tone);
 
-  // Show container
   container.classList.add('visible');
 
-  // Typewriter effect
   textEl.textContent = '';
   let i = 0;
   typewriterInterval = setInterval(() => {
@@ -35,7 +32,6 @@ export function showGodDialogue(text, tone = 'neutral', duration = 5000) {
     if (i >= text.length) {
       clearInterval(typewriterInterval);
       typewriterInterval = null;
-      // Auto-hide after duration
       fadeTimeout = setTimeout(() => {
         container.classList.remove('visible');
       }, duration);

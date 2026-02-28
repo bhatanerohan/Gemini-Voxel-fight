@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Voxel Arena — Gemini Hackathon Presentation</title>
+<title>PromptStrike — Gemini Hackathon Presentation</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 <style>
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
@@ -396,19 +396,21 @@ ul.features li::before {
       <span class="badge badge-gemini">Gemini Hackathon 2026</span>
     </div>
     <h1 class="mb-16" style="font-size: 4rem;">
-      <span class="gradient-text">Voxel Arena</span>
+      <span class="gradient-text">PromptStrike</span>
     </h1>
     <h3 class="mb-48" style="font-size: 1.8rem; color: var(--muted); font-weight: 400;">
       Where Gemini Doesn't Just Power the Game —<br><strong style="color: var(--text);">It <em>Is</em> the Enemy.</strong>
     </h3>
     <div class="flow mb-48">
-      <div class="flow-step">🎮 Voxel Combat</div>
+      <div class="flow-step">🎮 PromptStrike</div>
       <div class="flow-arrow">+</div>
       <div class="flow-step">🤖 Gemini AI Weapons</div>
       <div class="flow-arrow">+</div>
       <div class="flow-step">🧠 Living AI Antagonist</div>
       <div class="flow-arrow">+</div>
-      <div class="flow-step">📖 AI-Generated War Stories</div>
+      <div class="flow-step">🎯 Adaptive AI Difficulty</div>
+      <div class="flow-arrow">+</div>
+      <div class="flow-step">🧍 AI Avatar Skins</div>
     </div>
     <p style="color: var(--dim); font-size: 1rem;">Press <span class="mono" style="color:var(--accent)">→</span> or <span class="mono" style="color:var(--accent)">Space</span> to navigate</p>
   </div>
@@ -450,7 +452,7 @@ ul.features li::before {
     <span class="badge badge-cyan mb-24">What We Built</span>
     <h2 class="mb-16">A browser-based voxel arena fighter</h2>
     <h3 class="mb-48" style="font-size: 1.3rem;">where you forge weapons by <em>describing them</em> and an AI god wages war against you</h3>
-    <div class="cols cols-4 gap-24">
+    <div class="cols cols-3 gap-24" style="margin-bottom: 24px;">
       <div class="card text-center">
         <div style="font-size: 2.5rem; margin-bottom: 12px;">⚔️</div>
         <strong style="color: var(--text); display: block; margin-bottom: 6px;">AI Weapon Forge</strong>
@@ -466,10 +468,22 @@ ul.features li::before {
         <strong style="color: var(--text); display: block; margin-bottom: 6px;">Named Enemies</strong>
         <p style="font-size: 1rem;">NPCs with identities, grudges, and last words</p>
       </div>
+    </div>
+    <div class="cols cols-3 gap-24">
       <div class="card text-center">
-        <div style="font-size: 2.5rem; margin-bottom: 12px;">📜</div>
-        <strong style="color: var(--text); display: block; margin-bottom: 6px;">War Chronicle</strong>
-        <p style="font-size: 1rem;">AI writes an epic retelling of your battle</p>
+        <div style="font-size: 2.5rem; margin-bottom: 12px;">🎯</div>
+        <strong style="color: var(--text); display: block; margin-bottom: 6px;">Adaptive AI Difficulty</strong>
+        <p style="font-size: 1rem;">Gemini analyzes your playstyle and tunes wave difficulty in real-time</p>
+      </div>
+      <div class="card text-center">
+        <div style="font-size: 2.5rem; margin-bottom: 12px;">🧍</div>
+        <strong style="color: var(--text); display: block; margin-bottom: 6px;">AI Avatar Skins</strong>
+        <p style="font-size: 1rem;">"Cyber-ninja" → Gemini generates a unique color palette for your avatar</p>
+      </div>
+      <div class="card text-center">
+        <div style="font-size: 2.5rem; margin-bottom: 12px;">🎨</div>
+        <strong style="color: var(--text); display: block; margin-bottom: 6px;">AI Themes</strong>
+        <p style="font-size: 1rem;">Describe a mood and Gemini recolors the entire arena environment</p>
       </div>
     </div>
   </div>
@@ -549,12 +563,110 @@ ul.features li::before {
   </div>
 </div>
 
-<!-- ═══════════════════════════════════════════════════ SLIDE 6: ARCHITECTURE ═══ -->
+<!-- ═══════════════════════════════════════════════════ SLIDE 6: ADAPTIVE AI ═══ -->
 <div class="slide" data-slide="5">
+  <div class="grid-bg"></div>
+  <div class="content">
+    <span class="badge badge-orange mb-24">New: Adaptive AI</span>
+    <h2 class="mb-32">Gemini <span class="gradient-text">Learns How You Play</span></h2>
+    <div class="cols cols-2 gap-24">
+      <div>
+        <p class="mb-24" style="color: var(--text); font-weight: 500; font-size: 1.15rem;">After every wave, Gemini analyzes your performance and adjusts 5 difficulty knobs:</p>
+        <div class="card mb-16">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <span style="color:var(--neon-cyan);">Spawn Count</span>
+            <span class="mono" style="color:var(--muted); font-size:0.9rem;">0.6x — 1.8x</span>
+          </div>
+        </div>
+        <div class="card mb-16">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <span style="color:var(--neon-pink);">Enemy HP</span>
+            <span class="mono" style="color:var(--muted); font-size:0.9rem;">0.5x — 2.0x</span>
+          </div>
+        </div>
+        <div class="card mb-16">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <span style="color:var(--neon-orange);">Speed</span>
+            <span class="mono" style="color:var(--muted); font-size:0.9rem;">0.7x — 1.5x</span>
+          </div>
+        </div>
+        <div class="card mb-16">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <span style="color:var(--gemini-red);">Damage</span>
+            <span class="mono" style="color:var(--muted); font-size:0.9rem;">0.5x — 1.8x</span>
+          </div>
+        </div>
+        <div class="card">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <span style="color:var(--gemini-yellow);">Spawn Cadence</span>
+            <span class="mono" style="color:var(--muted); font-size:0.9rem;">0.6x — 1.6x</span>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="card card-glow mb-24">
+          <strong style="color: var(--text); display:block; margin-bottom: 12px;">How It Works</strong>
+          <ul class="features" style="font-size: 1rem;">
+            <li>Collects telemetry: HP, kill rate, near-deaths, movement patterns</li>
+            <li>Gemini produces a <strong style="color:var(--neon-cyan);">pressure score</strong> + 5 multipliers</li>
+            <li>Blends AI suggestions (70%) with safe heuristic bounds</li>
+            <li>Falls back to pure heuristics if API is slow</li>
+          </ul>
+        </div>
+        <div class="card">
+          <strong style="color: var(--text); display:block; margin-bottom: 12px;">Transparent to Players</strong>
+          <p style="font-size: 1rem;">HUD panel shows the current pressure level, source (BASE / HEURISTIC / GEMINI), and a trend arrow showing if difficulty is rising or falling.</p>
+          <div style="margin-top: 12px; padding: 12px; background: rgba(0,0,0,0.3); border-radius: 10px; font-size: 0.95rem;">
+            <span style="color: var(--neon-orange);">PRESSURE 72%</span> <span style="color: var(--muted);">|</span> <span style="color: var(--gemini-green);">GEMINI</span> <span style="color: var(--muted);">|</span> <span style="color: var(--neon-pink);">WAVE 5</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════ SLIDE 7: AVATAR SKINS & THEMES ═══ -->
+<div class="slide" data-slide="6">
+  <div class="grid-bg"></div>
+  <div class="content text-center">
+    <span class="badge badge-pink mb-24">New: Personalization</span>
+    <h2 class="mb-16">AI-Generated <span class="gradient-text">Avatar Skins & Themes</span></h2>
+    <h3 class="mb-32" style="font-size: 1.15rem;">Describe your character or mood — Gemini creates matching visuals instantly</h3>
+    <div class="cols cols-2 gap-24">
+      <div class="card" style="text-align: left;">
+        <div style="font-size: 1.8rem; margin-bottom: 10px;">🧍</div>
+        <strong style="color: var(--neon-cyan); display:block; margin-bottom: 12px;">Avatar Skin System</strong>
+        <ul class="features" style="font-size: 1rem;">
+          <li>4 built-in presets: Neon Ranger, Ember Guard, Jade Sentinel, Void Striker</li>
+          <li>Manual color pickers for suit, accent, skin tone, visor</li>
+          <li>Type <span class="mono" style="color:var(--neon-cyan);">"fire demon"</span> → Gemini generates 6 matching hex colors</li>
+          <li>Hash-based fallback if API is slow — always instant</li>
+          <li>Saved to localStorage, persists across sessions</li>
+        </ul>
+      </div>
+      <div class="card" style="text-align: left;">
+        <div style="font-size: 1.8rem; margin-bottom: 10px;">🎨</div>
+        <strong style="color: var(--neon-pink); display:block; margin-bottom: 12px;">AI Theme Generator</strong>
+        <ul class="features" style="font-size: 1rem;">
+          <li>Preset themes: Neon, Ember, Jade, Void, and more</li>
+          <li>Type a mood hint like <span class="mono" style="color:var(--neon-pink);">"underwater temple"</span></li>
+          <li>Gemini generates sky, fog, lighting, floor colors</li>
+          <li>Entire arena recolors in real-time, no reload</li>
+          <li>Toggle panel with palette icon in-game</li>
+        </ul>
+      </div>
+    </div>
+    <p style="margin-top: 24px; color: var(--dim); font-size: 1rem;">Both systems use <span class="mono">geminiJSON()</span> for structured output — guaranteed valid color data.</p>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════ SLIDE 8: ARCHITECTURE ═══ -->
+<div class="slide" data-slide="7">
   <div class="grid-bg"></div>
   <div class="content">
     <span class="badge badge-accent mb-24">Architecture</span>
     <h2 class="mb-32">How It All <span class="gradient-text">Connects</span></h2>
+    <!-- Updated architecture diagram with new systems -->
     <div class="cols cols-2 gap-24">
       <div class="code-block" style="font-size: 0.82rem; line-height: 1.65;">
 <span class="comment">// Match Memory — the spine of the system</span>
@@ -562,22 +674,19 @@ ul.features li::before {
 
      ┌─────────────────────┐
      │   <span class="key">MATCH MEMORY</span>       │
-     │   grows every wave   │
-     │   persists across    │
-     │   sessions           │
+     │   kills, HP, habits  │
+     │   weapons, movement  │
      └─────────┬───────────┘
                │
-    ┌──────────┼──────────┐
-    │          │          │
-    ▼          ▼          ▼
-┌────────┐ ┌────────┐ ┌────────┐
-│<span class="string">ARENA</span>   │ │<span class="string">NAMED</span>  │ │<span class="string">WAR</span>    │
-│<span class="string">GOD</span>     │ │<span class="string">ENEMIES</span>│ │<span class="string">CHRNCL</span> │
-│        │ │        │ │        │
-│speaks, │ │grudges,│ │epic    │
-│mutates │ │resist, │ │retell  │
-│arena   │ │taunts  │ │of run  │
-└────────┘ └────────┘ └────────┘</div>
+  ┌────────┬───┼───┬────────┐
+  │        │   │   │        │
+  ▼        ▼   ▼   ▼        ▼
+┌──────┐┌──────┐┌──────┐┌──────┐┌──────┐
+│<span class="string">ARENA</span> ││<span class="string">NAMED</span> ││<span class="string">WAR</span>   ││<span class="key">AI</span>    ││<span class="key">AVATAR</span>│
+│<span class="string">GOD</span>   ││<span class="string">ENEMY</span> ││<span class="string">CHRNL</span> ││<span class="key">BALNC</span> ││<span class="key">SKINS</span> │
+│taunts││grudge││epic  ││tuned ││prompt│
+│arena ││resist││story ││waves ││color │
+└──────┘└──────┘└──────┘└──────┘└──────┘</div>
       <div>
         <p class="mb-24" style="color: var(--text); font-weight: 500; font-size: 1.15rem;">Single growing context window per session:</p>
         <div class="card mb-16">
@@ -622,8 +731,8 @@ ul.features li::before {
   </div>
 </div>
 
-<!-- ═══════════════════════════════════════════════════ SLIDE 7: LLAMAINDEX ═══ -->
-<div class="slide" data-slide="6">
+<!-- ═══════════════════════════════════════════════════ SLIDE 9: LLAMAINDEX ═══ -->
+<div class="slide" data-slide="8">
   <div class="grid-bg"></div>
   <div class="content text-center">
     <span class="badge badge-pink mb-24">LlamaIndex Multi-Agent System</span>
@@ -665,8 +774,8 @@ ul.features li::before {
   </div>
 </div>
 
-<!-- ═══════════════════════════════════════════════════ SLIDE 8: DEMO FLOW ═══ -->
-<div class="slide" data-slide="7">
+<!-- ═══════════════════════════════════════════════════ SLIDE 10: DEMO FLOW ═══ -->
+<div class="slide" data-slide="9">
   <div class="grid-bg"></div>
   <div class="content">
     <span class="badge badge-cyan mb-24">Live Demo Flow</span>
@@ -708,8 +817,8 @@ ul.features li::before {
   </div>
 </div>
 
-<!-- ═══════════════════════════════════════════════════ SLIDE 9: TECH STACK ═══ -->
-<div class="slide" data-slide="8">
+<!-- ═══════════════════════════════════════════════════ SLIDE 11: TECH STACK ═══ -->
+<div class="slide" data-slide="10">
   <div class="grid-bg"></div>
   <div class="content">
     <span class="badge badge-accent mb-24">Tech Stack</span>
@@ -731,9 +840,9 @@ ul.features li::before {
         <div class="card mb-16">
           <strong style="color:var(--text); display:block; margin-bottom: 8px;">Gemini API Usage Strategy</strong>
           <ul class="features" style="font-size: 1rem;">
-            <li>1 batched call per wave (God + enemies)</li>
+            <li>1 batched call per wave (God + enemies + balancer)</li>
             <li>Fire-and-forget for mid-combat quips</li>
-            <li>Streaming for War Chronicle (typewriter)</li>
+            <li>On-demand for avatar skins and theme generation</li>
             <li>All calls during natural pauses — never blocks gameplay</li>
           </ul>
         </div>
@@ -751,8 +860,8 @@ ul.features li::before {
   </div>
 </div>
 
-<!-- ═══════════════════════════════════════════════════ SLIDE 10: STATS ═══ -->
-<div class="slide" data-slide="9">
+<!-- ═══════════════════════════════════════════════════ SLIDE 12: STATS ═══ -->
+<div class="slide" data-slide="11">
   <div class="grid-bg"></div>
   <div class="content text-center">
     <span class="badge badge-gemini mb-24">By The Numbers</span>
@@ -767,8 +876,8 @@ ul.features li::before {
         <div class="stat-label">LlamaIndex Agents</div>
       </div>
       <div class="stat">
-        <div class="stat-number" style="color: var(--neon-pink);">4</div>
-        <div class="stat-label">Enemy Types</div>
+        <div class="stat-number" style="color: var(--neon-pink);">5</div>
+        <div class="stat-label">AI Difficulty Knobs</div>
       </div>
       <div class="stat">
         <div class="stat-number" style="color: var(--gemini-yellow);">∞</div>
@@ -777,7 +886,7 @@ ul.features li::before {
     </div>
     <div class="cols cols-4 gap-24">
       <div class="stat">
-        <div class="stat-number" style="color: var(--gemini-green);">30+</div>
+        <div class="stat-number" style="color: var(--gemini-green);">35+</div>
         <div class="stat-label">Source Files</div>
       </div>
       <div class="stat">
@@ -796,8 +905,8 @@ ul.features li::before {
   </div>
 </div>
 
-<!-- ═══════════════════════════════════════════════════ SLIDE 11: JUDGING CRITERIA ═══ -->
-<div class="slide" data-slide="10">
+<!-- ═══════════════════════════════════════════════════ SLIDE 13: JUDGING CRITERIA ═══ -->
+<div class="slide" data-slide="12">
   <div class="grid-bg"></div>
   <div class="content">
     <span class="badge badge-accent mb-24">Hackathon Criteria</span>
@@ -812,8 +921,8 @@ ul.features li::before {
         <p style="font-size: 1.05rem;">Arena God makes real strategic decisions: removing cover, adding hazards, spawning champions. Not scripted — truly generated.</p>
       </div>
       <div class="card mb-16">
-        <strong style="color: var(--gemini-yellow); display:block; margin-bottom: 8px;">🔄 Evolving Behavior</strong>
-        <p style="font-size: 1.05rem;">Enemies develop resistances to your weapons. Wave 2's freeze-immune avenger directly counters Wave 1's Frost Nova.</p>
+        <strong style="color: var(--gemini-yellow); display:block; margin-bottom: 8px;">🔄 Adaptive Difficulty</strong>
+        <p style="font-size: 1.05rem;">AI Balancer analyzes kill rate, HP, and movement habits to tune 5 difficulty multipliers per wave. Enemies also develop resistances to your weapons.</p>
       </div>
       <div class="card mb-16">
         <strong style="color: var(--gemini-green); display:block; margin-bottom: 8px;">💾 Persistent Memory</strong>
@@ -821,7 +930,7 @@ ul.features li::before {
       </div>
       <div class="card mb-16">
         <strong style="color: var(--neon-cyan); display:block; margin-bottom: 8px;">🎨 Creative AI Use</strong>
-        <p style="font-size: 1.05rem;">AI generates working code (weapons), narrative (chronicle), strategy (arena mutations), and identity (enemy names) — not just one trick.</p>
+        <p style="font-size: 1.05rem;">AI generates working code (weapons), narrative (chronicle), strategy (arena mutations), identity (enemy names), avatar skins, arena themes, and adaptive difficulty — not just one trick.</p>
       </div>
       <div class="card">
         <strong style="color: var(--neon-pink); display:block; margin-bottom: 8px;">✨ Wow Factor</strong>
@@ -831,8 +940,8 @@ ul.features li::before {
   </div>
 </div>
 
-<!-- ═══════════════════════════════════════════════════ SLIDE 12: Q&A ═══ -->
-<div class="slide" data-slide="11">
+<!-- ═══════════════════════════════════════════════════ SLIDE 14: Q&A ═══ -->
+<div class="slide" data-slide="13">
   <div class="grid-bg"></div>
   <div class="content">
     <span class="badge badge-cyan mb-24">Anticipated Questions</span>
@@ -866,8 +975,8 @@ ul.features li::before {
   </div>
 </div>
 
-<!-- ═══════════════════════════════════════════════════ SLIDE 13: CLOSING ═══ -->
-<div class="slide" data-slide="12">
+<!-- ═══════════════════════════════════════════════════ SLIDE 15: CLOSING ═══ -->
+<div class="slide" data-slide="14">
   <div class="hero-glow"></div>
   <div class="grid-bg"></div>
   <div class="content text-center">
@@ -876,8 +985,8 @@ ul.features li::before {
     </div>
     <div class="quote mb-48" style="text-align: center; border: none; padding: 0; max-width: 900px; margin: 0 auto 48px; font-size: 1.8rem;">
       "In most games, AI controls difficulty sliders.<br>
-      In <span class="gradient-text">Voxel Arena</span>, Gemini <strong>IS</strong> the enemy.<br>
-      <span style="color: var(--muted); font-size: 1.4rem;">It watches you play, names its soldiers, remembers who you killed,<br>adapts its strategy, taunts you mid-battle —<br>and when you finally fall, it writes the story of your war.</span>"
+      In <span class="gradient-text">PromptStrike</span>, Gemini <strong>IS</strong> the enemy.<br>
+      <span style="color: var(--muted); font-size: 1.4rem;">It watches you play, learns your habits, tunes the difficulty,<br>names its soldiers, designs your avatar, recolors the arena —<br>and when you finally fall, it writes the story of your war.</span>"
     </div>
     <h1 style="font-size: 3.5rem;" class="mb-24">
       <span class="gemini-gradient">The AI isn't a tool.</span>
@@ -903,7 +1012,7 @@ ul.features li::before {
 </div><!-- /deck -->
 
 <!-- Navigation -->
-<div class="slide-counter" id="counter">01 / 13</div>
+<div class="slide-counter" id="counter">01 / 15</div>
 <div class="nav">
   <button onclick="prev()" title="Previous">←</button>
   <button onclick="next()" title="Next">→</button>

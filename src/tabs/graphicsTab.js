@@ -43,6 +43,10 @@ function _setup() {
       ${_slider('particle-density', 'Particle Density', 0, 1, 0.1)}
     </div>
     <div class="stab-section">
+      <div class="stab-section-title">Controls</div>
+      ${_slider('mouse-sensitivity', 'Mouse Sensitivity', 0.1, 3, 0.1)}
+    </div>
+    <div class="stab-section">
       <div class="stab-section-title">Display</div>
       <label style="display:flex;align-items:center;gap:8px;font-size:11px;color:#aaa;cursor:pointer">
         <input type="checkbox" id="gfx-show-fps" ${_settings.showFps ? 'checked' : ''} />
@@ -98,7 +102,8 @@ function _setSlider(id, value) {
   if (!input) return;
   input.value = value;
   const valEl = input.parentElement?.querySelector('.slider-value');
-  if (valEl) valEl.textContent = parseFloat(value).toFixed(id === 'fog-density' ? 3 : 2);
+  const decimals = id === 'fog-density' ? 3 : id === 'mouse-sensitivity' ? 1 : 2;
+  if (valEl) valEl.textContent = parseFloat(value).toFixed(decimals);
 }
 
 function _initSliderValues() {
@@ -111,6 +116,7 @@ function _initSliderValues() {
   _setSlider('bloom-threshold', s.bloomThreshold ?? r.bloomPass?.threshold ?? 0.25);
   _setSlider('fog-density', s.fogDensity ?? r.scene?.fog?.density ?? 0.01);
   _setSlider('particle-density', s.particleDensity ?? 0.5);
+  _setSlider('mouse-sensitivity', s.mouseSensitivity ?? 1.0);
 }
 
 function _onSliderChange(id, value) {
@@ -136,6 +142,9 @@ function _onSliderChange(id, value) {
       break;
     case 'gfx-particle-density':
       _settings.particleDensity = value;
+      break;
+    case 'gfx-mouse-sensitivity':
+      _settings.mouseSensitivity = value;
       break;
   }
 

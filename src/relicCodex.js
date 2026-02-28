@@ -864,7 +864,7 @@ async function handleDecode(session) {
 
   ui.decodeBtn.textContent = 'Decoded';
   session.readyForDecree = true;
-  renderDecreesForSession(session);
+  loadDecreesForSession(session);
 }
 
 function handleSkipDecode(session) {
@@ -877,7 +877,7 @@ function handleSkipDecode(session) {
   ui.skipBtn.disabled = true;
   ui.decodeBtn.textContent = 'Skipped';
   ui.relicResult.textContent = 'Relic archived without decode. No bonus awarded.';
-  renderDecreesForSession(session);
+  loadDecreesForSession(session);
 }
 
 async function loadDecreesForSession(session) {
@@ -949,10 +949,8 @@ export function beginRelicIntermission(wave) {
   if (ui.skipBtn) ui.skipBtn.disabled = false;
 
   clearDecreeButtons();
-  setDecreeStatus('Fetching adaptive decrees...');
+  setDecreeStatus('Decode or skip relic to unlock decree choice.');
   openIntermission();
-
-  loadDecreesForSession(session);
 
   return new Promise((resolve) => {
     session.resolve = () => resolve();
