@@ -22,9 +22,14 @@ import { initArenaGod } from './arenaGod.js';
 import { saveSessionSummary, buildBossLearningProfile } from './sessionMemory.js';
 import { generateChronicle, displayChronicle, hideChronicle } from './warChronicle.js';
 import { initMutations, updateMutations } from './arenaMutations.js';
-import { initThemeManager, applyThemeInstant, PRESETS } from './themeManager.js';
-import { initThemeUI } from './themeUI.js';
+import { initThemeManager, applyThemeInstant, PRESETS, setGameContext } from './themeManager.js';
 import { applyAvatarConfig, updateAvatarEffects, getAvatarConcept, resetAvatar, setAvatarParticlePool } from './avatarBuilder.js';
+import { initSettingsPanel, openSettings, closeSettings, isSettingsOpen, updateGearVisibility } from './settingsPanel.js';
+import { initThemesTab } from './tabs/themesTab.js';
+import { initWeaponsTab } from './tabs/weaponsTab.js';
+import { initSkinsTab, setSkinsCallbacks } from './tabs/skinsTab.js';
+import { initAvatarsTab, setAvatarApplyCallback } from './tabs/avatarsTab.js';
+import { initGraphicsTab, setGraphicsSceneRefs, applyStoredGraphicsSettings } from './tabs/graphicsTab.js';
 import { initAvatarUI, showAvatarUI } from './avatarUI.js';
 import { initNarrator, showNarratorLine } from './narratorUI.js';
 import { getNarratorLine, preWarmNarrator } from './llama/narratorAgent.js';
@@ -1137,7 +1142,24 @@ function init() {
   // ── Theme system ──
   initThemeManager(getSceneRefs());
   applyThemeInstant(PRESETS.neon);
-  initThemeUI();
+
+  // ── Settings panel ──
+  initThemesTab();
+  initWeaponsTab();
+  initSkinsTab();
+  initAvatarsTab();
+  initGraphicsTab();
+  initSettingsPanel();
+  setGraphicsSceneRefs(getSceneRefs());
+  applyStoredGraphicsSettings(getSceneRefs());
+  setSkinsCallbacks({
+    applySkin: (config) => setPlayerSkin(config),
+    generateSkin: (prompt, signal) => generateSkinFromPrompt(prompt, signal),
+  });
+  setAvatarApplyCallback((config) => {
+    applyAvatarConfig(player.mesh, config);
+    if (config.personality) showNarratorLine(config.personality, 'epic', 3000);
+  });
 
   // Player - voxel human
   player.mesh = createVoxelHumanoid({
@@ -1265,6 +1287,7 @@ function init() {
 
   // Narrator hooks
   GameState.on('wave_clear', (data) => {
+    setGameContext({ wave: GameState.wave });
     setTimeout(() => {
       getNarratorLine('wave_clear', `wave ${GameState.wave} cleared`).then(r => {
         if (r?.line) showNarratorLine(r.line, r.mood);
@@ -1287,6 +1310,9 @@ function init() {
 
   // ── Avatar Selection: defer game start until avatar chosen ──
   initAvatarUI((avatarConfig) => {
+    // Show gear icon now that avatar overlay is closed
+    updateGearVisibility();
+
     // Apply avatar to player mesh
     applyAvatarConfig(player.mesh, avatarConfig);
 
@@ -1302,12 +1328,21 @@ function init() {
     preWarmNarrator();
 
     // Generate arena (non-blocking, applies when ready)
+    // Set initial game context for theme AI
+    setGameContext({
+      avatarConcept: avatarConfig.name,
+      avatarColors: avatarConfig.colors,
+      wave: 1,
+    });
+
     generateArenaConfig(1, avatarConfig.name).then(arenaConfig => {
       if (arenaConfig && arenaConfig.theme.name !== 'Default Arena') {
         buildArenaFromConfig(scene, arenaConfig, coverBlockMeshes, [
           ...cameraCollisionMeshes,
           ...aimCollisionMeshes,
         ]);
+        // Update game context with arena theme so AI theme generation is aware
+        setGameContext({ arenaTheme: arenaConfig.theme });
         // Show arena name via narrator
         if (arenaConfig.narrativeIntro) {
           setTimeout(() => showNarratorLine(arenaConfig.narrativeIntro, 'ominous', 4000), 3500);
@@ -1873,21 +1908,25 @@ function isTextEntryTarget(target) {
 
 function setupInput() {
   window.addEventListener('keydown', (e) => {
+    // ESC: close settings first, then forge
+    if (e.key === 'Escape') {
+      if (isSettingsOpen()) { closeSettings(); return; }
+      if (isForgeOpen()) { closeForge(); return; }
+    }
     if (isTextEntryTarget(e.target)) return;
-    if (isForgeOpen() || window._blockGameInput) return;
+    if (isForgeOpen() || isSettingsOpen() || window._blockGameInput) return;
     keys[e.key.toLowerCase()] = true;
     if (e.key >= '1' && e.key <= '4') {
       switchWeapon(parseInt(e.key) - 1);
     }
     if (e.key === 't' || e.key === 'T') openForge();
-    if (e.key === 'c' || e.key === 'C') cyclePlayerSkinPreset();
   });
   window.addEventListener('keyup', (e) => {
     keys[e.key.toLowerCase()] = false;
   });
 
   renderer.domElement.addEventListener('mousedown', (e) => {
-    if (isForgeOpen()) return;
+    if (isForgeOpen() || isSettingsOpen()) return;
     if (e.button === 0) mouseDown = true;
   });
   window.addEventListener('mouseup', (e) => { if (e.button === 0) mouseDown = false; });

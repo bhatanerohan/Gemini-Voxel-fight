@@ -85,11 +85,12 @@
 
 <!-- Arena God Dialogue -->
 <div id="arena-god">
+  <div id="god-label">Arena God</div>
   <div id="god-portrait"></div>
   <div id="god-text"></div>
 </div>
 
-<div id="hud">WASD move | Mouse aim | Hold click fire | T forge weapon | 1-4 switch weapons | C cycle skin</div>
+<div id="hud">WASD move | Mouse aim | Hold click fire | T forge weapon | 1-4 switch weapons | ESC settings</div>
 
 <!-- Screen flash overlay -->
 <div id="screen-flash"></div>
@@ -106,6 +107,22 @@
 <div id="player-health">
   <div id="player-health-fill"></div>
   <span id="player-health-text">100</span>
+</div>
+
+<!-- Settings Panel -->
+<button id="settings-gear-btn" title="Settings (ESC)">&#9881;</button>
+<div id="settings-overlay">
+  <div id="settings-container">
+    <div id="settings-tab-bar">
+      <button class="settings-tab active" data-tab="themes"><span class="tab-icon">&#127912;</span><span class="tab-label">Themes</span></button>
+      <button class="settings-tab" data-tab="weapons"><span class="tab-icon">&#9876;</span><span class="tab-label">Weapons</span></button>
+      <button class="settings-tab" data-tab="skins"><span class="tab-icon">&#128100;</span><span class="tab-label">Skins</span></button>
+      <button class="settings-tab" data-tab="avatars"><span class="tab-icon">&#129497;</span><span class="tab-label">Avatars</span></button>
+      <button class="settings-tab" data-tab="graphics"><span class="tab-icon">&#128200;</span><span class="tab-label">Graphics</span></button>
+    </div>
+    <div id="settings-content"></div>
+  </div>
+  <div id="settings-toast"><span class="toast-text"></span><button class="toast-undo">Undo</button></div>
 </div>
 
 <!-- Weapon Forge -->
