@@ -10,15 +10,16 @@ import {
 } from './sandbox.js';
 import { initForge, openForge, closeForge, isForgeOpen } from './forge.js';
 import { initProgression, getProgress, recordGame, getCrosshairColor, getTitle } from './progression.js';
-import { updateLevelDisplay } from './hud.js';
+import { updateLevelDisplay, showMessage, initAiBalanceHud, updateAiBalanceHud } from './hud.js';
 import { updateEnemyAI } from './enemyAI.js';
 import { GameState } from './gameState.js';
 import { initAudio, startAmbientMusic, playPlayerHit } from './audio.js';
 import { initWaves, updateWaves, startNextWave } from './waves.js';
 import { createDefaultStatus, clearStatus } from './statusEffects.js';
+import { getTypeConfig } from './enemyTypes.js';
 import { MatchMemory } from './matchMemory.js';
 import { initArenaGod } from './arenaGod.js';
-import { saveSessionSummary } from './sessionMemory.js';
+import { saveSessionSummary, buildBossLearningProfile } from './sessionMemory.js';
 import { generateChronicle, displayChronicle, hideChronicle } from './warChronicle.js';
 import { initMutations, updateMutations } from './arenaMutations.js';
 import { initThemeManager, applyThemeInstant, PRESETS } from './themeManager.js';
@@ -32,6 +33,7 @@ import { applyDamageMutation, updateDamageEffects, checkDamageThreshold, clearDa
 import { generateArenaConfig } from './llama/arenaGenAgent.js';
 import { buildArenaFromConfig, updateArenaEffects, setArenaParticlePool } from './arenaBuilder.js';
 import { geminiJSON } from './geminiService.js';
+import { initAiBalancer, getAiBalanceProfile } from './aiBalancer.js';
 
 // ══════════════════════════════════════════════════
 // STATE
@@ -1224,6 +1226,32 @@ function init() {
   initProgression();
   initArenaGod();
   initMutations(scene, coverBlockMeshes, player, enemies);
+  initAiBalancer();
+  initAiBalanceHud({
+    source: 'base',
+    profile: getAiBalanceProfile(),
+    waveApplied: 1,
+  });
+  GameState.on('spawn_champion', (detail) => {
+    spawnAdaptiveChampion(typeof detail === 'string' ? detail : '');
+  });
+  GameState.on('ai_balance_updated', (data) => {
+    const profile = data?.profile;
+    if (!profile) return;
+    updateAiBalanceHud(data, { announce: true });
+    const trend = Math.round((profile.pressureScore - 1) * 100);
+    const trendLabel = trend >= 0 ? `+${trend}%` : `${trend}%`;
+    const sourceLabel = data?.source === 'gemini' ? 'Gemini' : 'Auto';
+    const waveLabel = Number(data?.waveApplied) || (GameState.wave + 1);
+    showMessage(`${sourceLabel} balance tuned for W${waveLabel} (${trendLabel} pressure)`, 2200);
+  });
+  GameState.on('restart', () => {
+    initAiBalanceHud({
+      source: 'base',
+      profile: getAiBalanceProfile(),
+      waveApplied: 1,
+    });
+  });
 
   // Init narrator
   initNarrator();
@@ -1424,6 +1452,15 @@ function restartGame() {
     e.vel.set(0, 0, 0);
     e.mesh.visible = true;
     e.attackCooldown = 0;
+    e.isChampion = false;
+    e.championState = null;
+    e.championCombat = null;
+    if (e.nameEl) e.nameEl.textContent = '';
+    if (e.mesh.userData.rig?.root) e.mesh.userData.rig.root.scale.setScalar(1);
+    if (e.bodyMesh?.material?.emissive) {
+      e.bodyMesh.material.emissive.setHex(0x000000);
+      e.bodyMesh.material.emissiveIntensity = 0;
+    }
   }
   // Reset damage mutations
   clearDamageMutations(player.mesh);
@@ -1474,9 +1511,28 @@ function updatePlayer(dt) {
   player.pos.y = 0.6;
   player.mesh.position.copy(player.pos);
   player.mesh.rotation.y = playerYaw;
+  const localForward = player.vel.dot(_playerFwd);
+  const localRight = player.vel.dot(_playerRgt);
   animateHumanoid(player.mesh, dt, Math.hypot(player.vel.x, player.vel.z), {
-    localForward: player.vel.dot(_playerFwd),
-    localRight: player.vel.dot(_playerRgt),
+    localForward,
+    localRight,
+  });
+
+  let nearestEnemyDist = Infinity;
+  for (const e of enemies) {
+    if (!e.alive) continue;
+    const dx = e.pos.x - player.pos.x;
+    const dz = e.pos.z - player.pos.z;
+    const d = Math.sqrt(dx * dx + dz * dz);
+    if (d < nearestEnemyDist) nearestEnemyDist = d;
+  }
+  MatchMemory.recordPlayerMovement({
+    dt,
+    speed: Math.hypot(player.vel.x, player.vel.z),
+    localForward,
+    localRight,
+    sprinting: !!keys['shift'],
+    nearestEnemyDist,
   });
 }
 
@@ -1495,12 +1551,105 @@ function showEnemyTaunt(e) {
   setTimeout(() => el.remove(), 2500);
 }
 
+function randomArenaEdgePosition() {
+  const angle = Math.random() * Math.PI * 2;
+  const dist = 14 + Math.random() * 14;
+  return new THREE.Vector3(
+    THREE.MathUtils.clamp(player.pos.x + Math.cos(angle) * dist, -45, 45),
+    0.6,
+    THREE.MathUtils.clamp(player.pos.z + Math.sin(angle) * dist, -45, 45),
+  );
+}
+
+function championPhaseLabel(phase) {
+  if (phase === 'phase2') return 'Counter';
+  if (phase === 'phase3') return 'Execution';
+  return 'Hunter';
+}
+
+function promoteEnemyToChampion(e, detail = '') {
+  if (!e) return;
+
+  const profile = buildBossLearningProfile();
+  const baseHp = Math.max(120, e.maxHp || 120);
+  const hpMult = 2.2 + profile.aggression * 0.8;
+  const championHp = Math.round(baseHp * hpMult);
+  const baseDamage = Math.max(14, e.typeConfig?.damage || 14);
+
+  e.isChampion = true;
+  e.championState = {
+    phase: 'phase1',
+    burstCooldown: 0.6,
+    profile,
+    detail,
+  };
+  e.championCombat = {
+    damageScale: 1.15,
+    cooldownScale: 0.95,
+    attackRange: 3.4,
+    phase: 'phase1',
+  };
+  e.typeName = 'Champion';
+  e.typeConfig = {
+    ...(e.typeConfig || {}),
+    name: 'Champion',
+    damage: Math.round(baseDamage * (1.1 + profile.aggression * 0.4)),
+    attackCooldown: 1.05,
+    attackRange: 3.4,
+    scoreValue: 1200,
+    scale: 1.62,
+  };
+  e.maxHp = championHp;
+  e.hp = championHp;
+  e.attackCooldown = 0;
+  if (e.status) clearStatus(e.status);
+
+  if (e.mesh.userData.rig?.root) e.mesh.userData.rig.root.scale.setScalar(1.62);
+  if (e.bodyMesh?.material) {
+    e.bodyMesh.material.color.setHex(0x4a1032);
+    if (e.bodyMesh.material.emissive) {
+      e.bodyMesh.material.emissive.setHex(0x2d0a54);
+      e.bodyMesh.material.emissiveIntensity = 0.35;
+    }
+  }
+  if (e.nameEl) e.nameEl.textContent = `CHAMPION ${championPhaseLabel('phase1')}`;
+}
+
+function spawnAdaptiveChampion(detail = '') {
+  let champion = enemies.find(e => e.alive && e.isChampion);
+  if (champion) {
+    champion.hp = Math.min(champion.maxHp, champion.hp + champion.maxHp * 0.25);
+    if (champion.nameEl) champion.nameEl.textContent = `CHAMPION ${championPhaseLabel(champion.championCombat?.phase)}`;
+    showNarratorLine('The Champion grows angrier.', 'angry', 2600);
+    return champion;
+  }
+
+  champion = enemies.find(e => e.alive && !e.isChampion);
+  if (!champion) {
+    champion = enemies.find(e => !e.alive || e.hp <= 0);
+    if (!champion) return null;
+    champion.alive = true;
+    champion.mesh.visible = true;
+    champion.vel.set(0, 0, 0);
+    champion.pos.copy(randomArenaEdgePosition());
+    champion.mesh.position.copy(champion.pos);
+  }
+
+  promoteEnemyToChampion(champion, detail);
+  showNarratorLine(detail ? `Champion enters: ${detail}` : 'A learning Champion enters the arena.', 'ominous', 3500);
+  return champion;
+}
+
 // ══════════════════════════════════════════════════
 // ENEMIES
 // ══════════════════════════════════════════════════
 function updateEnemies(dt) {
   for (const e of enemies) {
     if (e.alive === false) continue;
+    if (!e.typeConfig) {
+      e.typeConfig = getTypeConfig('grunt');
+      e.typeName = e.typeConfig.name;
+    }
     const s = e.status || (e.status = createDefaultStatus());
     const frozen = s.freeze > 0;
     const stunned = s.stun > 0;
@@ -1527,6 +1676,14 @@ function updateEnemies(dt) {
 
     if (!stunned) {
       updateEnemyAI(e, player, enemies, dt, slowScale * (e.speedBuff || 1));
+
+      // Defensive fallback: if AI state gets inconsistent, keep enemies advancing.
+      const planarSpeed = Math.hypot(e.vel.x, e.vel.z);
+      if (dist > 2 && dist < 60 && planarSpeed < 0.12) {
+        const recover = 8 * slowScale * (e.speedBuff || 1) * dt;
+        e.vel.x += (dx / Math.max(0.001, dist)) * recover;
+        e.vel.z += (dz / Math.max(0.001, dist)) * recover;
+      }
     }
 
     // Gravity pulls enemies down when airborne
@@ -1562,6 +1719,10 @@ function updateEnemies(dt) {
     e.mesh.rotation.y = e.yaw;
     animateHumanoid(e.mesh, dt, Math.hypot(e.vel.x, e.vel.z));
 
+    if (e.isChampion && e.nameEl) {
+      e.nameEl.textContent = `CHAMPION ${championPhaseLabel(e.championCombat?.phase)}`;
+    }
+
     // Taunt on first aggro
     if (dist < 15 && e.identity && !e.identity.hasTaunted) {
       e.identity.hasTaunted = true;
@@ -1569,12 +1730,15 @@ function updateEnemies(dt) {
     }
 
     // Melee attack
-    const attackRange = e.typeConfig?.attackRange || 2.5;
+    const combatMod = e.championCombat;
+    const attackRange = combatMod?.attackRange || e.typeConfig?.attackRange || 2.5;
     if (!frozen && !stunned && dist < attackRange) {
       e.attackCooldown = (e.attackCooldown ?? 0) - dt;
       if (e.attackCooldown <= 0) {
-        e.attackCooldown = e.typeConfig?.attackCooldown || 1.2;
-        const dmg = e.typeConfig?.damage || 10;
+        const baseCd = e.typeConfig?.attackCooldown || 1.2;
+        e.attackCooldown = baseCd * (combatMod?.cooldownScale || 1);
+        const baseDmg = e.typeConfig?.damage || 10;
+        const dmg = baseDmg * (combatMod?.damageScale || 1);
         if (player.invulnTimer <= 0 && player.hp > 0) {
           player.hp -= dmg;
           MatchMemory.recordPlayerHit(dmg, player.hp);
@@ -1619,8 +1783,12 @@ export function respawnEnemy(x, z, hp = 100, typeConfig = null) {
   dead.vel.set(0, 0, 0);
   dead.yaw = 0;
   dead.attackCooldown = 0;
+  dead.isChampion = false;
+  dead.championState = null;
+  dead.championCombat = null;
   dead.mesh.visible = true;
   dead.mesh.position.copy(dead.pos);
+  if (dead.mesh.userData.rig?.root) dead.mesh.userData.rig.root.scale.setScalar(typeConfig?.scale || 1);
   if (dead.status) {
     clearStatus(dead.status);
   }
@@ -1705,6 +1873,7 @@ function isTextEntryTarget(target) {
 
 function setupInput() {
   window.addEventListener('keydown', (e) => {
+    if (isTextEntryTarget(e.target)) return;
     if (isForgeOpen() || window._blockGameInput) return;
     keys[e.key.toLowerCase()] = true;
     if (e.key >= '1' && e.key <= '4') {

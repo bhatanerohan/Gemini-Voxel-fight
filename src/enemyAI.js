@@ -15,6 +15,7 @@ const _tempVec = new THREE.Vector3();
  * @param {number} slowScale - slow multiplier (1.0 = normal)
  */
 export function updateEnemyAI(e, player, allEnemies, dt, slowScale = 1) {
+  if (e.isChampion) return championAI(e, player, allEnemies, dt, slowScale);
   const type = e.typeConfig?.name || 'Grunt';
 
   switch (type) {
@@ -23,6 +24,76 @@ export function updateEnemyAI(e, player, allEnemies, dt, slowScale = 1) {
     case 'Ranged': return rangedAI(e, player, allEnemies, dt, slowScale);
     default: return gruntAI(e, player, allEnemies, dt, slowScale);
   }
+}
+
+function getChampionPhase(e) {
+  const hpRatio = e.maxHp > 0 ? (e.hp / e.maxHp) : 1;
+  if (hpRatio > 0.66) return 'phase1';
+  if (hpRatio > 0.33) return 'phase2';
+  return 'phase3';
+}
+
+function championAI(e, player, allEnemies, dt, slowScale) {
+  const state = e.championState || (e.championState = {});
+  const profile = state.profile || {};
+  const aggression = THREE.MathUtils.clamp(profile.aggression ?? 0.5, 0, 1);
+  const strafeBias = THREE.MathUtils.clamp(profile.strafeBias ?? 0.25, 0, 1);
+  const sprintBias = THREE.MathUtils.clamp(profile.sprintBias ?? 0.2, 0, 1);
+  const closeRangeBias = THREE.MathUtils.clamp(profile.closeRangeBias ?? 0.3, 0, 1);
+  const longRangeBias = THREE.MathUtils.clamp(profile.longRangeBias ?? 0.35, 0, 1);
+  const prefersLongRange = longRangeBias > closeRangeBias + 0.1;
+
+  state.burstCooldown = Number.isFinite(state.burstCooldown) ? state.burstCooldown : 0;
+  state.burstCooldown -= dt;
+  state.phase = getChampionPhase(e);
+
+  const leadTimeBase = THREE.MathUtils.lerp(0.12, 0.45, strafeBias);
+  const leadTime = state.phase === 'phase3' ? leadTimeBase + 0.12 : leadTimeBase;
+  _tempVec.copy(player.pos);
+  if (player.vel) _tempVec.addScaledVector(player.vel, leadTime);
+  let dx = _tempVec.x - e.pos.x;
+  let dz = _tempVec.z - e.pos.z;
+  let dist = Math.max(0.001, Math.sqrt(dx * dx + dz * dz));
+  const nx = dx / dist;
+  const nz = dz / dist;
+
+  let pursuit = 13 + aggression * 5;
+  if (state.phase === 'phase2') pursuit += 3;
+  if (state.phase === 'phase3') pursuit += 7;
+  pursuit *= slowScale;
+
+  if (prefersLongRange && dist < 8) {
+    e.vel.x -= nx * pursuit * 0.7 * dt;
+    e.vel.z -= nz * pursuit * 0.7 * dt;
+  } else if (dist > 2.6) {
+    e.vel.x += nx * pursuit * dt;
+    e.vel.z += nz * pursuit * dt;
+  }
+
+  if (strafeBias > 0.28 && dist < 20) {
+    const sideX = -nz;
+    const sideZ = nx;
+    const strafeDir = Math.sign((player.vel?.x || 0) * sideX + (player.vel?.z || 0) * sideZ) || 1;
+    const strafeForce = (5 + strafeBias * 12) * slowScale;
+    e.vel.x += sideX * strafeDir * strafeForce * dt;
+    e.vel.z += sideZ * strafeDir * strafeForce * dt;
+  }
+
+  if (state.phase !== 'phase1' && state.burstCooldown <= 0 && dist > 4 && dist < 26) {
+    const burst = state.phase === 'phase3' ? 36 : 28;
+    e.vel.x += nx * burst * slowScale;
+    e.vel.z += nz * burst * slowScale;
+    state.burstCooldown = THREE.MathUtils.lerp(2.6, 1.3, Math.max(sprintBias, aggression));
+  }
+
+  const damageScale = state.phase === 'phase1' ? 1.15 : state.phase === 'phase2' ? 1.38 : 1.72;
+  const cooldownScale = state.phase === 'phase1' ? 0.95 : state.phase === 'phase2' ? 0.72 : 0.55;
+  const attackRange = prefersLongRange
+    ? (state.phase === 'phase3' ? 3.8 : 3.2)
+    : (state.phase === 'phase3' ? 4.4 : 3.6);
+  e.championCombat = { damageScale, cooldownScale, attackRange, phase: state.phase };
+
+  applySeparation(e, allEnemies, dt, slowScale * 0.6);
 }
 
 function distToPlayer(e, player) {

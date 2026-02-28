@@ -7,6 +7,7 @@ import { MatchMemory } from './matchMemory.js';
 import { generateEnemyIdentities, applyIdentity } from './enemyIdentity.js';
 import { pickEnemyType, getTypeConfig } from './enemyTypes.js';
 import { clearStatus } from './statusEffects.js';
+import { getAiBalanceProfile } from './aiBalancer.js';
 
 let _scene = null;
 let _enemies = [];
@@ -55,17 +56,25 @@ export function startNextWave() {
   showWaveAnnounce(wave);
   playWaveStart();
 
+  const balance = getAiBalanceProfile();
+
   // Calculate enemy count for this wave
+  const baseCount = WAVE_CONFIG.baseCount + (wave - 1) * WAVE_CONFIG.countPerWave;
   const count = Math.min(
-    WAVE_CONFIG.baseCount + (wave - 1) * WAVE_CONFIG.countPerWave,
-    WAVE_CONFIG.maxEnemies
+    WAVE_CONFIG.maxEnemies,
+    Math.max(1, Math.round(baseCount * (balance.spawnCountMult || 1)))
   );
-  const hp = WAVE_CONFIG.baseHp + (wave - 1) * WAVE_CONFIG.hpPerWave;
-  const speedMult = WAVE_CONFIG.baseSpeed + (wave - 1) * WAVE_CONFIG.speedPerWave;
+  const hp = (WAVE_CONFIG.baseHp + (wave - 1) * WAVE_CONFIG.hpPerWave) * (balance.enemyHpMult || 1);
+  const speedMult = (WAVE_CONFIG.baseSpeed + (wave - 1) * WAVE_CONFIG.speedPerWave) * (balance.enemySpeedMult || 1);
 
   // Spawn/reuse enemies
-  spawnWaveEnemies(count, hp, speedMult);
+  spawnWaveEnemies(count, hp, speedMult, balance);
   waveActive = true;
+
+  // Guaranteed boss moments so learning champion appears even without Arena God mutation.
+  if (wave >= 3 && wave % 3 === 0) {
+    GameState.emit('spawn_champion', `Wave ${wave} champion adapts to your habits.`);
+  }
 
   // Generate identities asynchronously (fire-and-forget)
   if (wave >= 2) {
@@ -82,23 +91,46 @@ export function startNextWave() {
   }
 }
 
-function spawnWaveEnemies(count, hp, speedMult) {
+function cloneTypeConfig(config) {
+  if (!config || typeof config !== 'object') return {};
+  const out = { ...config };
+  if (config.colors) out.colors = { ...config.colors };
+  if (config.dash) out.dash = { ...config.dash };
+  if (config.projectile) out.projectile = { ...config.projectile };
+  return out;
+}
+
+function spawnWaveEnemies(count, hp, speedMult, balanceProfile = null) {
   const wave = GameState.wave;
+  const hpMult = Math.max(0.1, Number(balanceProfile?.enemyHpMult) || 1);
+  const damageMult = Math.max(0.1, Number(balanceProfile?.enemyDamageMult) || 1);
+  const cooldownMult = Math.max(0.1, Number(balanceProfile?.enemyCooldownMult) || 1);
+
   // Reuse existing enemy objects or note we need more
   for (let i = 0; i < _enemies.length; i++) {
     if (i < count) {
       const e = _enemies[i];
       e.identity = null;
+      e.isChampion = false;
+      e.championState = null;
+      e.championCombat = null;
       if (e.nameEl) e.nameEl.textContent = '';
 
       // Assign enemy type based on wave composition
       const typeName = pickEnemyType(wave);
-      const typeConfig = getTypeConfig(typeName);
+      const baseType = getTypeConfig(typeName);
+      const typeConfig = cloneTypeConfig(baseType);
+      typeConfig.damage = Math.max(1, Math.round((typeConfig.damage || 1) * damageMult));
+      typeConfig.attackCooldown = Math.max(0.35, (typeConfig.attackCooldown || 1.2) * cooldownMult);
+      if (typeConfig.projectile?.damage) {
+        typeConfig.projectile.damage = Math.max(1, Math.round(typeConfig.projectile.damage * damageMult));
+      }
       e.typeConfig = typeConfig;
       e.typeName = typeName;
 
       // Scale HP from type base + wave scaling
-      e.hp = typeConfig.hp + (wave - 1) * WAVE_CONFIG.hpPerWave;
+      const typeHpOffset = (typeConfig.hp || WAVE_CONFIG.baseHp) - WAVE_CONFIG.baseHp;
+      e.hp = Math.max(10, Math.round(hp + typeHpOffset * hpMult));
       e.maxHp = e.hp;
 
       e.alive = true;
@@ -107,7 +139,7 @@ function spawnWaveEnemies(count, hp, speedMult) {
       e.vel.set(0, 0, 0);
       // Clear arena god modifiers from previous wave
       e.resistType = null;
-      e.speedBuff = 1;
+      e.speedBuff = speedMult;
 
       // Apply type-specific visuals
       if (e.mesh.userData.rig?.root) {
@@ -133,6 +165,9 @@ function spawnWaveEnemies(count, hp, speedMult) {
       // Hide extra enemies
       _enemies[i].alive = false;
       _enemies[i].mesh.visible = false;
+      _enemies[i].isChampion = false;
+      _enemies[i].championState = null;
+      _enemies[i].championCombat = null;
     }
   }
 }

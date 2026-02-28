@@ -15,6 +15,16 @@ export const MatchMemory = {
   _recentKillTimestamps: [],
   _notableMoments: [],
   _activeWeaponGetter: null,
+  _movement: {
+    combatTime: 0,
+    strafingTime: 0,
+    sprintTime: 0,
+    forwardTime: 0,
+    backwardTime: 0,
+    closeRangeTime: 0,
+    midRangeTime: 0,
+    longRangeTime: 0,
+  },
 
   /** Register a function that returns the current weapon name */
   setWeaponGetter(fn) {
@@ -144,9 +154,45 @@ export const MatchMemory = {
     }
   },
 
+  recordPlayerMovement({ dt = 0, speed = 0, localForward = 0, localRight = 0, sprinting = false, nearestEnemyDist = Infinity } = {}) {
+    if (!Number.isFinite(dt) || dt <= 0) return;
+    if (GameState.phase !== 'playing') return;
+    if (nearestEnemyDist > 35) return;
+
+    this._movement.combatTime += dt;
+
+    if (Math.abs(localRight) > Math.abs(localForward) * 0.7 && speed > 0.8) this._movement.strafingTime += dt;
+    if (sprinting && speed > 1.2) this._movement.sprintTime += dt;
+    if (localForward > 0.2) this._movement.forwardTime += dt;
+    if (localForward < -0.2) this._movement.backwardTime += dt;
+
+    if (nearestEnemyDist < 8) this._movement.closeRangeTime += dt;
+    else if (nearestEnemyDist < 18) this._movement.midRangeTime += dt;
+    else this._movement.longRangeTime += dt;
+  },
+
+  getMovementHabits() {
+    const combatTime = Math.max(0.001, this._movement.combatTime);
+    const totalRange = Math.max(
+      0.001,
+      this._movement.closeRangeTime + this._movement.midRangeTime + this._movement.longRangeTime
+    );
+    return {
+      combatTime: Math.round(this._movement.combatTime),
+      strafeRatio: this._movement.strafingTime / combatTime,
+      sprintRatio: this._movement.sprintTime / combatTime,
+      forwardRatio: this._movement.forwardTime / combatTime,
+      backwardRatio: this._movement.backwardTime / combatTime,
+      closeRangeRatio: this._movement.closeRangeTime / totalRange,
+      midRangeRatio: this._movement.midRangeTime / totalRange,
+      longRangeRatio: this._movement.longRangeTime / totalRange,
+    };
+  },
+
   buildGeminiContext() {
     const matchDuration = Math.round(this._now());
     const profile = this.getPlayerProfile();
+    const movementHabits = this.getMovementHabits();
 
     const waveSummaries = this.waves.map(w => ({
       wave: w.wave,
@@ -179,6 +225,7 @@ export const MatchMemory = {
       matchDuration,
       currentWave: GameState.wave,
       playerProfile: profile,
+      movementHabits,
       waveSummaries,
       forgedWeapons: forged,
       recentDeaths,
@@ -226,6 +273,16 @@ export const MatchMemory = {
     this._matchStart = Date.now();
     this._recentKillTimestamps = [];
     this._notableMoments = [];
+    this._movement = {
+      combatTime: 0,
+      strafingTime: 0,
+      sprintTime: 0,
+      forwardTime: 0,
+      backwardTime: 0,
+      closeRangeTime: 0,
+      midRangeTime: 0,
+      longRangeTime: 0,
+    };
   },
 };
 
