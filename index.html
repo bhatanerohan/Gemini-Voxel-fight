@@ -49,6 +49,19 @@
     <button id="player-skin-apply" type="button">Apply</button>
   </div>
   <button id="player-skin-random" type="button">Randomize</button>
+  <div class="narrator-tts-controls">
+    <label class="narrator-tts-toggle">
+      <input id="narrator-tts-enabled" type="checkbox" />
+      Narrator Voice
+    </label>
+    <div class="narrator-tts-row">
+      <select id="narrator-tts-voice" aria-label="Narrator voice"></select>
+    </div>
+    <div class="narrator-tts-row">
+      <input id="narrator-tts-rate" type="range" min="0.75" max="1.30" step="0.05" value="1" />
+      <span id="narrator-tts-rate-label">1.00x</span>
+    </div>
+  </div>
   <div id="player-skin-name"></div>
 </div>
 

@@ -150,6 +150,56 @@ canvas { display: block; cursor: crosshair; }
   letter-spacing: 0.4px;
 }
 
+.narrator-tts-controls {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(159, 225, 255, 0.2);
+}
+
+.narrator-tts-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #9fe1ff;
+  font-size: 10px;
+  margin-bottom: 6px;
+}
+
+.narrator-tts-toggle input[type='checkbox'] {
+  accent-color: #62ffe2;
+}
+
+.narrator-tts-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 5px;
+}
+
+#narrator-tts-voice {
+  width: 100%;
+  min-width: 0;
+  background: rgba(6, 14, 24, 0.85);
+  color: #d8edff;
+  border: 1px solid rgba(159, 225, 255, 0.35);
+  border-radius: 4px;
+  padding: 4px 5px;
+  font-family: inherit;
+  font-size: 10px;
+}
+
+#narrator-tts-rate {
+  flex: 1;
+  accent-color: #62ffe2;
+}
+
+#narrator-tts-rate-label {
+  color: #9fe1ff;
+  font-size: 10px;
+  min-width: 34px;
+  text-align: right;
+}
+
 .level-label { font-weight: bold; font-size: 15px; }
 .player-title {
   display: block; font-size: 11px; color: #aef;

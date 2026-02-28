@@ -8,6 +8,16 @@ export default defineConfig(({ mode }) => {
   return {
     server: {
       proxy: {
+        '/gemini/tts': {
+          target: 'https://generativelanguage.googleapis.com',
+          changeOrigin: true,
+          rewrite: () => '/v1beta/models/gemini-2.5-flash-preview-tts:generateContent',
+          configure: (proxy) => {
+            proxy.on('proxyReq', (proxyReq) => {
+              if (geminiKey) proxyReq.setHeader('x-goog-api-key', geminiKey);
+            });
+          },
+        },
         '/gemini': {
           target: 'https://generativelanguage.googleapis.com',
           changeOrigin: true,
