@@ -231,11 +231,172 @@ export function updateSandboxTimers(dt) {
       }
     }
   }
+
+  if (_crates) {
+    for (const c of _crates) {
+      if (c.alive === false) continue;
+      const s = ensureEnemyStatus(c);
+
+      if (s.freeze > 0) s.freeze = Math.max(0, s.freeze - dt);
+      if (s.stun > 0) s.stun = Math.max(0, s.stun - dt);
+
+      if (s.slowTime > 0) {
+        s.slowTime = Math.max(0, s.slowTime - dt);
+        if (s.slowTime <= 0) s.slowMult = 1;
+      }
+
+      if (s.burnTime > 0 && s.burnDps > 0) {
+        s.burnTime = Math.max(0, s.burnTime - dt);
+        s.burnAcc += dt;
+        const tick = Math.max(0.05, s.burnTick || 0.15);
+
+        while (s.burnAcc >= tick && s.burnDps > 0) {
+          s.burnAcc -= tick;
+          damageCrate(c, s.burnDps * tick, { color: 0xffaa44, intensity: 1.9, durationMs: 60 });
+
+          if (_particlePool && Math.random() < 0.25) {
+            _particlePool.burst({
+              position: c.pos, color: c.particleColor ?? 0xff8844, count: 2,
+              speed: 2.2, lifetime: 0.2, size: 2, gravity: 0.15,
+            });
+          }
+        }
+
+        if (s.burnTime <= 0) {
+          s.burnDps = 0;
+          s.burnTick = 0.15;
+          s.burnAcc = 0;
+        }
+      }
+
+      if (c.movable !== false) {
+        const moveScale = s.freeze > 0 ? 0.2 : (s.slowTime > 0 ? THREE.MathUtils.clamp(s.slowMult ?? 1, 0, 1) : 1);
+        c.vel.multiplyScalar(Math.max(0, 1 - 3.25 * dt));
+        const home = c.originalPos.clone().sub(c.pos);
+        c.vel.addScaledVector(home, (c.returnStrength ?? 2.8) * dt);
+        c.pos.addScaledVector(c.vel, dt * moveScale);
+        c.pos.y = c.originalPos.y;
+        c.mesh.position.copy(c.pos);
+      }
+
+      refreshArenaPropVisualState(c);
+    }
+  }
 }
 
 // Status effect helpers now imported from statusEffects.js
 const ensureEnemyStatus = ensureStatus;
 const clearEnemyStatuses = (e) => clearStatus(ensureStatus(e));
+
+function getArenaPropMeshes(c) {
+  if (Array.isArray(c?.reactiveMeshes) && c.reactiveMeshes.length) return c.reactiveMeshes;
+  if (c?.bodyMesh) return [c.bodyMesh];
+  return [];
+}
+
+function captureArenaPropMaterialBase(c) {
+  for (const mesh of getArenaPropMeshes(c)) {
+    if (!mesh?.material?.emissive) continue;
+    if (mesh.userData.baseArenaEmissiveHex == null) {
+      mesh.userData.baseArenaEmissiveHex = mesh.material.emissive.getHex();
+      mesh.userData.baseArenaEmissiveIntensity = mesh.material.emissiveIntensity ?? 0;
+    }
+  }
+}
+
+function setArenaPropEmissive(c, color, intensity) {
+  captureArenaPropMaterialBase(c);
+  for (const mesh of getArenaPropMeshes(c)) {
+    if (!mesh?.material?.emissive) continue;
+    mesh.material.emissive.set(color);
+    mesh.material.emissiveIntensity = intensity;
+  }
+}
+
+function restoreArenaPropBaseEmissive(c) {
+  captureArenaPropMaterialBase(c);
+  for (const mesh of getArenaPropMeshes(c)) {
+    if (!mesh?.material?.emissive) continue;
+    mesh.material.emissive.setHex(mesh.userData.baseArenaEmissiveHex ?? 0x000000);
+    mesh.material.emissiveIntensity = mesh.userData.baseArenaEmissiveIntensity ?? 0;
+  }
+}
+
+function refreshArenaPropVisualState(c) {
+  if (!c || c.alive === false || c._hitFlashActive) return;
+  const s = ensureEnemyStatus(c);
+  let color = 0x000000;
+  let intensity = 0;
+  if (s.freeze > 0) {
+    color = 0x77d8ff;
+    intensity = 0.58;
+  } else if (s.burnTime > 0 && s.burnDps > 0) {
+    color = 0xff8a33;
+    intensity = 0.42 + Math.sin(elapsed * 18) * 0.12;
+  } else if (s.stun > 0) {
+    color = 0xcfe6ff;
+    intensity = 0.42;
+  } else if (s.slowTime > 0) {
+    color = 0x406ca8;
+    intensity = 0.24;
+  }
+  if (color === 0x000000 && intensity === 0) {
+    restoreArenaPropBaseEmissive(c);
+    return;
+  }
+  setArenaPropEmissive(c, color, intensity);
+}
+
+function flashArenaPropHit(c, opts = {}) {
+  const { color = 0xffcc88, intensity = 1.6, durationMs = 80 } = opts;
+  c._hitFlashActive = true;
+  setArenaPropEmissive(c, color, intensity);
+  const durationSec = durationMs / 1000;
+  const t0 = elapsed;
+  cbs.push((dt, el) => {
+    if (el - t0 >= durationSec) {
+      c._hitFlashActive = false;
+      if (c.hp > 0) refreshArenaPropVisualState(c);
+      return false;
+    }
+  });
+}
+
+function setArenaPropOpacity(c, alpha) {
+  for (const mesh of c.fadeMeshes || getArenaPropMeshes(c)) {
+    if (!mesh?.material) continue;
+    mesh.material.transparent = alpha < 1;
+    mesh.material.opacity = alpha;
+  }
+}
+
+function applyArenaPropForce(c, force = {}) {
+  if (!c || c.alive === false || c.movable === false) return c?.vel?.clone?.() || new THREE.Vector3();
+  const scale = c.forceResponse ?? 0.12;
+  c.vel.x += (force.x || 0) * scale;
+  c.vel.y += (force.y || 0) * scale * 0.35;
+  c.vel.z += (force.z || 0) * scale;
+  return c.vel.clone();
+}
+
+function setArenaPropVelocity(c, velocity = {}) {
+  if (!c?.vel) return new THREE.Vector3();
+  if (c.movable === false) {
+    c.vel.set(0, 0, 0);
+    return c.vel.clone();
+  }
+  c.vel.set(velocity.x || 0, velocity.y || 0, velocity.z || 0);
+  return c.vel.clone();
+}
+
+function dampArenaPropVelocity(c, multiplier = 0.8, opts = {}) {
+  if (!c?.vel) return new THREE.Vector3();
+  const m = THREE.MathUtils.clamp(multiplier, 0, 1);
+  c.vel.x *= m;
+  if (opts.includeY) c.vel.y *= m;
+  c.vel.z *= m;
+  return c.vel.clone();
+}
 
 function flashEnemyHit(e, opts = {}) {
   const { color = 0xffffff, intensity = 1.9, durationMs = 80 } = opts;
@@ -390,18 +551,24 @@ function damageCrate(c, amt, flashOpts = {}) {
   if (c.alive === false) return;
   c.hp -= amt;
   playHit();
-  flashEnemyHit(c, { color: 0xffcc88, intensity: 1.6, durationMs: 80, ...flashOpts });
+  flashArenaPropHit(c, {
+    color: c.kind === 'wall' ? 0xaec4ff : 0xffcc88,
+    intensity: c.kind === 'wall' ? 1.35 : 1.6,
+    durationMs: c.kind === 'wall' ? 90 : 80,
+    ...flashOpts,
+  });
 
   if (_camera) {
     const screenPos = c.pos.clone().project(_camera);
     const x = (screenPos.x * 0.5 + 0.5) * window.innerWidth;
     const y = (-screenPos.y * 0.5 + 0.5) * window.innerHeight;
-    showDamageNumber(x, y, amt, '#ddaa44');
+    showDamageNumber(x, y, amt, c.kind === 'wall' ? '#9db8ff' : '#ddaa44');
   }
 
   if (c.hp <= 0) {
     crateDeathEffect(c);
     c.alive = false;
+    c.vel?.set?.(0, 0, 0);
     c.mesh.visible = false;
     respawnCrateAfterDelay(c);
   }
@@ -409,20 +576,21 @@ function damageCrate(c, amt, flashOpts = {}) {
 
 function crateDeathEffect(c) {
   const pos = c.pos.clone();
-  const crateColor = 0x8B6914;
-  // Spawn voxel cube fragments
-  for (let i = 0; i < 8; i++) {
-    const size = 0.15 + Math.random() * 0.15;
+  const fragmentColor = c.fragmentColor ?? (c.kind === 'wall' ? 0x4c5d88 : 0x8B6914);
+  const particleColor = c.particleColor ?? (c.kind === 'wall' ? 0x85a2ff : 0xbb8822);
+  const fragmentCount = c.kind === 'wall' ? 11 : 8;
+  for (let i = 0; i < fragmentCount; i++) {
+    const size = c.kind === 'wall' ? (0.18 + Math.random() * 0.18) : (0.15 + Math.random() * 0.15);
     const frag = new THREE.Mesh(
-      new THREE.BoxGeometry(size, size, size),
-      new THREE.MeshStandardMaterial({ color: crateColor, flatShading: true })
+      new THREE.BoxGeometry(size * (c.kind === 'wall' ? 1.6 : 1), size, size),
+      new THREE.MeshStandardMaterial({ color: fragmentColor, flatShading: true })
     );
     const speed = 4 + Math.random() * 6;
     const angle = Math.random() * Math.PI * 2;
     const vy = 3 + Math.random() * 5;
     const vel = new THREE.Vector3(Math.cos(angle) * speed, vy, Math.sin(angle) * speed);
     entities.push({
-      mesh: frag, pos: pos.clone().add(new THREE.Vector3((Math.random() - 0.5) * 0.5, Math.random() * 0.5, (Math.random() - 0.5) * 0.5)),
+      mesh: frag, pos: pos.clone().add(new THREE.Vector3((Math.random() - 0.5) * 0.7, Math.random() * 0.6, (Math.random() - 0.5) * 0.7)),
       vel, angVel: { x: (Math.random() - 0.5) * 10, y: (Math.random() - 0.5) * 10, z: (Math.random() - 0.5) * 10 },
       gravity: 1, radius: size * 0.5, bounce: 0.25, lifetime: 2, age: 0, onUpdate: null, alive: true,
       destroy() { destroyEntity(this); }, getPosition() { return this.pos.clone(); },
@@ -432,22 +600,30 @@ function crateDeathEffect(c) {
     _scene.add(frag);
   }
 
-  // Particle burst
-  _particlePool.burst({ position: pos, color: 0xbb8822, count: 10, speed: 6, lifetime: 0.6, size: 3, gravity: 0.8 });
+  _particlePool.burst({
+    position: pos,
+    color: particleColor,
+    count: c.kind === 'wall' ? 12 : 10,
+    speed: c.kind === 'wall' ? 5.5 : 6,
+    lifetime: 0.6,
+    size: c.kind === 'wall' ? 3.4 : 3,
+    gravity: 0.8,
+  });
 
-  // Light flash
-  const fl = new THREE.PointLight(0xffaa44, 2.5, 8);
+  const lightColor = c.kind === 'wall' ? 0x9ab3ff : 0xffaa44;
+  const baseIntensity = c.kind === 'wall' ? 2.2 : 2.5;
+  const fl = new THREE.PointLight(lightColor, baseIntensity, c.kind === 'wall' ? 9 : 8);
   fl.position.copy(pos);
   _scene.add(fl);
   activeLights.push(fl);
   const flt0 = elapsed;
   cbs.push((dt, el) => {
     const a = el - flt0;
-    fl.intensity = Math.max(0, 2.5 * (1 - a / 0.25));
+    fl.intensity = Math.max(0, baseIntensity * (1 - a / 0.25));
     if (a > 0.25) { _scene.remove(fl); const idx = activeLights.indexOf(fl); if (idx !== -1) activeLights.splice(idx, 1); return false; }
   });
 
-  addScorchMark(pos, 1.5);
+  addScorchMark(pos, c.kind === 'wall' ? 1.9 : 1.5);
 }
 
 function respawnCrateAfterDelay(c) {
@@ -455,23 +631,20 @@ function respawnCrateAfterDelay(c) {
     c.hp = c.maxHp;
     c.alive = true;
     c.pos.copy(c.originalPos);
+    c.vel?.set?.(0, 0, 0);
     c.mesh.position.copy(c.originalPos);
     c.mesh.visible = true;
-    // Fade in
-    c.bodyMesh.material.transparent = true;
-    c.bodyMesh.material.opacity = 0;
+    clearStatus(ensureEnemyStatus(c));
+    setArenaPropOpacity(c, 0);
     const t0 = elapsed;
     cbs.push((dt, el) => {
       const age = el - t0;
       const alpha = Math.min(1, age / 0.5);
-      c.bodyMesh.material.opacity = alpha;
-      if (alpha >= 1) {
-        c.bodyMesh.material.transparent = false;
-        c.bodyMesh.material.opacity = 1;
-        return false;
-      }
+      setArenaPropOpacity(c, alpha);
+      refreshArenaPropVisualState(c);
+      if (alpha >= 1) return false;
     });
-  }, 12000);
+  }, c.respawnDelayMs ?? 12000);
 }
 
 // ── Build the context passed to AI weapon code ──
@@ -541,15 +714,44 @@ export function buildCtx() {
     mesh: c.mesh,
     hp: c.hp,
     isObject: true,
-    velocity: new THREE.Vector3(),
+    kind: c.kind || 'crate',
+    velocity: c.vel.clone(),
     takeDamage: (amt) => damageCrate(c, amt),
-    applyForce: () => {},
-    setVelocity: () => {},
-    dampVelocity: () => {},
-    freeze: () => {},
-    stun: () => {},
-    slow: () => {},
-    ignite: () => {},
+    applyForce: (f) => applyArenaPropForce(c, f),
+    setVelocity: (v) => setArenaPropVelocity(c, v),
+    dampVelocity: (multiplier = 0.8, opts = {}) => dampArenaPropVelocity(c, multiplier, opts),
+    freeze: (seconds = 0.75, opts = {}) => {
+      const s = ensureEnemyStatus(c);
+      s.freeze = Math.max(s.freeze, Math.max(0, seconds || 0));
+      if (opts.zeroVelocity !== false) c.vel.set(0, 0, 0);
+      refreshArenaPropVisualState(c);
+      return s.freeze;
+    },
+    stun: (seconds = 0.4) => {
+      const s = ensureEnemyStatus(c);
+      s.stun = Math.max(s.stun, Math.max(0, seconds || 0));
+      refreshArenaPropVisualState(c);
+      return s.stun;
+    },
+    slow: (multiplier = 0.35, seconds = 1.2) => {
+      const s = ensureEnemyStatus(c);
+      const m = THREE.MathUtils.clamp(multiplier, 0, 1);
+      s.slowMult = s.slowTime > 0 ? Math.min(s.slowMult, m) : m;
+      s.slowTime = Math.max(s.slowTime, Math.max(0, seconds || 0));
+      refreshArenaPropVisualState(c);
+      return { multiplier: s.slowMult, remaining: s.slowTime };
+    },
+    ignite: (opts = {}) => {
+      const dps = Math.max(0, opts.dps ?? 8);
+      const duration = Math.max(0, opts.duration ?? 1.2);
+      const tick = Math.max(0.05, opts.tick ?? 0.15);
+      const s = ensureEnemyStatus(c);
+      s.burnDps = Math.max(s.burnDps, dps);
+      s.burnTime = Math.max(s.burnTime, duration);
+      s.burnTick = Math.min(s.burnTick || tick, tick);
+      refreshArenaPropVisualState(c);
+      return { dps: s.burnDps, remaining: s.burnTime };
+    },
     distanceTo: (point) => c.pos.distanceTo(toVec3(point)),
   });
 
@@ -662,6 +864,27 @@ export function buildCtx() {
         affected++;
       }
 
+      for (const prop of _crates) {
+        if (!prop.alive || prop.movable === false) continue;
+        const delta = prop.pos.clone().sub(c);
+        const d = delta.length();
+        if (d > radius) continue;
+
+        let dir = mode === 'inward' ? c.clone().sub(prop.pos) : delta;
+        if (dir.lengthSq() < 1e-6) {
+          dir = new THREE.Vector3(Math.random() - 0.5, 0, Math.random() - 0.5);
+        }
+        dir.normalize();
+
+        const falloff = falloffMode === 'none' ? 1 : Math.max(0, 1 - d / radius);
+        applyArenaPropForce(prop, {
+          x: dir.x * strength * falloff,
+          y: (dir.y * strength + lift) * falloff,
+          z: dir.z * strength * falloff,
+        });
+        affected++;
+      }
+
       return affected;
     },
     // ── Trail Renderer ──
@@ -700,6 +923,10 @@ export function buildCtx() {
         const d = c.pos.distanceTo(p);
         if (d < radius) {
           const falloff = 1 - d / radius;
+          if (c.movable !== false) {
+            const dir = c.pos.clone().sub(p).normalize();
+            applyArenaPropForce(c, dir.multiplyScalar(force * falloff));
+          }
           damageCrate(c, damage * falloff);
         }
       }
@@ -888,6 +1115,15 @@ export function resetSandbox() {
       clearEnemyStatuses(e);
       e.vel.set(0, 0, 0);
       if (e.pos.y < 0.6) e.pos.y = 0.6;
+    }
+  }
+  if (_crates) {
+    for (const c of _crates) {
+      clearStatus(ensureEnemyStatus(c));
+      c.vel?.set?.(0, 0, 0);
+      if (c.pos && c.originalPos) c.pos.copy(c.originalPos);
+      if (c.mesh && c.originalPos) c.mesh.position.copy(c.originalPos);
+      refreshArenaPropVisualState(c);
     }
   }
   cbs.length = 0; timers.length = 0; intervals.length = 0;

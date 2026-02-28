@@ -158,3 +158,15 @@ Original prompt: i though we aren't using 2 stage weapon generator? / yes do it
   - example prompts
   - project structure
   - local-vs-production deployment caveats for the current Gemini proxy setup
+
+- Added reactive arena props without changing weapon generation/runtime contracts:
+  - `src/main.js`: replaced the old crate-only layout with a denser arena prop set (`arenaProps`) including stacked crates and segmented wall cover.
+  - `src/sandbox.js`: arena props now participate in the existing target wrapper path used by weapons, with damage/status reactions, break effects, respawn, and limited force response.
+  - Walls remain anchored; crates are movable.
+  - Validation: `node --check src/main.js`, `node --check src/sandbox.js`, and `npm run build` passed.
+
+- Tuned crate motion to feel less heavy after user feedback:
+  - increased crate `forceResponse` (`0.14 -> 0.42`)
+  - reduced crate return/home spring (`7.5 -> 2.8`)
+  - reduced per-frame prop damping in `src/sandbox.js` (`1 - 8*dt` -> `1 - 3.25*dt`)
+  - Validation: `node --check src/main.js`, `node --check src/sandbox.js`, and `npm run build` passed.

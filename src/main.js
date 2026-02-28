@@ -85,10 +85,21 @@ const _playerForce = new THREE.Vector3();
 
 const player = { pos: new THREE.Vector3(0, 0.6, 0), vel: new THREE.Vector3(), mesh: null, hp: 100, maxHp: 100, invulnTimer: 0 };
 const enemies = [];
-const crates = [];
+const arenaProps = [];
 
 // ── Destructible Crates ──
-function createCrate() {
+function registerArenaProp(prop, collisionMeshes = []) {
+  scene.add(prop.mesh);
+  for (const mesh of collisionMeshes) {
+    if (!mesh) continue;
+    cameraCollisionMeshes.push(mesh);
+    aimCollisionMeshes.push(mesh);
+  }
+  arenaProps.push(prop);
+  return prop;
+}
+
+function createCrate({ stacked = false } = {}) {
   const group = new THREE.Group();
   const mat = new THREE.MeshStandardMaterial({
     color: 0x8B6914, roughness: 0.65, metalness: 0.1, flatShading: true,
@@ -98,7 +109,6 @@ function createCrate() {
   mesh.castShadow = true;
   mesh.receiveShadow = true;
   group.add(mesh);
-  // Accent band
   const bandMat = new THREE.MeshStandardMaterial({
     color: 0x6B4F10, roughness: 0.7, metalness: 0.05, flatShading: true,
   });
@@ -110,31 +120,148 @@ function createCrate() {
   band2.position.y = -0.2;
   band2.castShadow = true;
   group.add(band2);
-  return { group, bodyMesh: mesh };
+
+  const reactiveMeshes = [mesh, band, band2];
+  if (stacked) {
+    const upperMesh = new THREE.Mesh(new THREE.BoxGeometry(0.92, 0.92, 0.92), mat.clone());
+    upperMesh.position.set(0, 0.98, 0);
+    upperMesh.castShadow = true;
+    upperMesh.receiveShadow = true;
+    group.add(upperMesh);
+
+    const upperBand = new THREE.Mesh(new THREE.BoxGeometry(0.98, 0.12, 0.98), bandMat.clone());
+    upperBand.position.set(0, 1.1, 0);
+    upperBand.castShadow = true;
+    group.add(upperBand);
+    reactiveMeshes.push(upperMesh, upperBand);
+  }
+
+  return { group, bodyMesh: mesh, reactiveMeshes };
 }
 
-function initCrates() {
-  const positions = [
-    [6, 6], [-6, 6], [6, -6], [-6, -6],
-    [20, 0], [-20, 0], [0, 20], [0, -20],
+function createReactiveWallSegment({ width = 3.6, height = 2.2, depth = 1.05 } = {}) {
+  const group = new THREE.Group();
+  const wallMat = new THREE.MeshStandardMaterial({
+    color: 0x2e3550,
+    roughness: 0.56,
+    metalness: 0.28,
+    flatShading: true,
+    emissive: 0x000000,
+    emissiveIntensity: 0,
+  });
+  const trimMat = new THREE.MeshStandardMaterial({
+    color: 0x607cb6,
+    roughness: 0.34,
+    metalness: 0.58,
+    flatShading: true,
+    emissive: 0x081224,
+    emissiveIntensity: 0.2,
+  });
+  const braceMat = new THREE.MeshStandardMaterial({
+    color: 0x3a4668,
+    roughness: 0.42,
+    metalness: 0.35,
+    flatShading: true,
+    emissive: 0x000000,
+    emissiveIntensity: 0,
+  });
+
+  const addSegment = (geo, material, x, y, z) => {
+    const mesh = new THREE.Mesh(geo, material);
+    mesh.position.set(x, y, z);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    group.add(mesh);
+    return mesh;
+  };
+
+  const bodyMesh = addSegment(new THREE.BoxGeometry(width, height, depth), wallMat, 0, 0, 0);
+  const cap = addSegment(new THREE.BoxGeometry(width + 0.22, 0.18, depth + 0.14), trimMat, 0, height * 0.5 + 0.12, 0);
+  const panel = addSegment(new THREE.BoxGeometry(width * 0.62, height * 0.36, depth + 0.08), trimMat, 0, 0.08, 0);
+  const leftPost = addSegment(new THREE.BoxGeometry(0.28, height + 0.18, depth + 0.16), braceMat, -width * 0.5 + 0.12, 0, 0);
+  const rightPost = addSegment(new THREE.BoxGeometry(0.28, height + 0.18, depth + 0.16), braceMat, width * 0.5 - 0.12, 0, 0);
+  return { group, bodyMesh, reactiveMeshes: [bodyMesh, cap, panel, leftPost, rightPost] };
+}
+
+function addArenaCrate(x, z, opts = {}) {
+  const { hp = 50, stacked = false } = opts;
+  const { group, bodyMesh, reactiveMeshes } = createCrate({ stacked });
+  group.position.set(x, 0.6, z);
+  registerArenaProp({
+    kind: 'crate',
+    pos: new THREE.Vector3(x, 0.6, z),
+    vel: new THREE.Vector3(),
+    hp,
+    maxHp: hp,
+    alive: true,
+    mesh: group,
+    bodyMesh,
+    reactiveMeshes,
+    fadeMeshes: reactiveMeshes,
+    isObject: true,
+    movable: true,
+    forceResponse: 0.42,
+    returnStrength: 2.8,
+    fragmentColor: 0x8B6914,
+    particleColor: 0xbb8822,
+    respawnDelayMs: 12000,
+    originalPos: new THREE.Vector3(x, 0.6, z),
+    status: createDefaultStatus(),
+  }, [bodyMesh]);
+}
+
+function addArenaWall(x, z, rotationY = 0, opts = {}) {
+  const { width = 3.6, height = 2.2, depth = 1.05, hp = 80 } = opts;
+  const { group, bodyMesh, reactiveMeshes } = createReactiveWallSegment({ width, height, depth });
+  group.position.set(x, height * 0.5, z);
+  group.rotation.y = rotationY;
+  registerArenaProp({
+    kind: 'wall',
+    pos: new THREE.Vector3(x, height * 0.5, z),
+    vel: new THREE.Vector3(),
+    hp,
+    maxHp: hp,
+    alive: true,
+    mesh: group,
+    bodyMesh,
+    reactiveMeshes,
+    fadeMeshes: reactiveMeshes,
+    isObject: true,
+    movable: false,
+    fragmentColor: 0x4c5d88,
+    particleColor: 0x85a2ff,
+    respawnDelayMs: 16000,
+    originalPos: new THREE.Vector3(x, height * 0.5, z),
+    status: createDefaultStatus(),
+  }, [bodyMesh]);
+}
+
+function initArenaProps() {
+  const centralWallSegments = [
+    [-14, -11, 0], [-5, -11, 0], [5, -11, 0], [14, -11, 0],
+    [-14, 11, 0], [-5, 11, 0], [5, 11, 0], [14, 11, 0],
+    [-11, -14, Math.PI / 2], [-11, -5, Math.PI / 2], [-11, 5, Math.PI / 2], [-11, 14, Math.PI / 2],
+    [11, -14, Math.PI / 2], [11, -5, Math.PI / 2], [11, 5, Math.PI / 2], [11, 14, Math.PI / 2],
   ];
-  for (const [x, z] of positions) {
-    const { group, bodyMesh } = createCrate();
-    group.position.set(x, 0.6, z);
-    scene.add(group);
-    aimCollisionMeshes.push(bodyMesh);
-    crates.push({
-      pos: new THREE.Vector3(x, 0.6, z),
-      vel: new THREE.Vector3(),
-      hp: 50,
-      maxHp: 50,
-      alive: true,
-      mesh: group,
-      bodyMesh,
-      isObject: true,
-      originalPos: new THREE.Vector3(x, 0.6, z),
-    });
-  }
+  centralWallSegments.forEach(([x, z, rot]) => {
+    addArenaWall(x, z, rot, { width: 4.8, height: 2.2, depth: 1.05, hp: 82 });
+  });
+
+  const bunkerCorners = [
+    [-31, -29, 0], [-27.6, -25.6, Math.PI / 2],
+    [31, -29, 0], [27.6, -25.6, Math.PI / 2],
+    [-31, 29, 0], [-27.6, 25.6, Math.PI / 2],
+    [31, 29, 0], [27.6, 25.6, Math.PI / 2],
+  ];
+  bunkerCorners.forEach(([x, z, rot]) => {
+    addArenaWall(x, z, rot, { width: 4.1, height: 2.5, depth: 1.1, hp: 96 });
+  });
+
+  [
+    [-6, -6, true], [6, -6, false], [-6, 6, false], [6, 6, true],
+    [0, -18, false], [0, 18, false], [-18, 0, false], [18, 0, false],
+    [-24, -12, true], [24, -12, true], [-24, 12, true], [24, 12, true],
+  ].forEach(([x, z, stacked]) => addArenaCrate(x, z, { stacked }));
 }
 
 function createVoxelHumanoid({
@@ -709,11 +836,11 @@ function init() {
     });
   });
 
-  // Init crates
-  initCrates();
+  // Init reactive arena props
+  initArenaProps();
 
   // Init sandbox with references
-  initSandbox(scene, camera, player, enemies, () => playerYaw, () => getPlayerAimPoint(), { triggerSlowMo, triggerFlash }, crates);
+  initSandbox(scene, camera, player, enemies, () => playerYaw, () => getPlayerAimPoint(), { triggerSlowMo, triggerFlash }, arenaProps);
   MatchMemory.setWeaponGetter(getActiveWeaponName);
 
   // Init wave system
@@ -873,17 +1000,24 @@ function restartGame() {
     e.mesh.visible = true;
     e.attackCooldown = 0;
   }
-  // Reset crates
-  for (const c of crates) {
+  // Reset reactive arena props
+  for (const c of arenaProps) {
     c.hp = c.maxHp;
     c.alive = true;
+    c.vel.set(0, 0, 0);
     c.pos.copy(c.originalPos);
     c.mesh.visible = true;
     c.mesh.position.copy(c.originalPos);
-    c.bodyMesh.material.opacity = 1;
-    c.bodyMesh.material.transparent = false;
-    c.bodyMesh.material.emissive.set(0x000000);
-    c.bodyMesh.material.emissiveIntensity = 0;
+    if (c.status) clearStatus(c.status);
+    for (const mesh of c.fadeMeshes || c.reactiveMeshes || [c.bodyMesh]) {
+      if (!mesh?.material) continue;
+      mesh.material.opacity = 1;
+      mesh.material.transparent = false;
+      if (mesh.material.emissive) {
+        mesh.material.emissive.set(0x000000);
+        mesh.material.emissiveIntensity = 0;
+      }
+    }
   }
 }
 
