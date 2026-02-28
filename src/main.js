@@ -6,7 +6,7 @@ import { CSS2DRenderer, CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRe
 import {
   initSandbox, updateEntities, updateTrails, updateSandboxTimers,
   updateParticles, fire, getShake, tickShake, setShake, switchWeapon, loadSavedWeapons,
-  getActiveWeaponName, tickFrame,
+  getActiveWeaponName, tickFrame, setRuntimeCombatModifiers,
 } from './sandbox.js';
 import { initForge, openForge, closeForge, isForgeOpen } from './forge.js';
 import { initProgression, getProgress, recordGame, getCrosshairColor, getTitle } from './progression.js';
@@ -14,7 +14,7 @@ import { updateLevelDisplay, showMessage, initAiBalanceHud, updateAiBalanceHud }
 import { updateEnemyAI } from './enemyAI.js';
 import { GameState } from './gameState.js';
 import { initAudio, startAmbientMusic, playPlayerHit } from './audio.js';
-import { initWaves, updateWaves, startNextWave } from './waves.js';
+import { initWaves, updateWaves, startNextWave, setWaveBreakLock } from './waves.js';
 import { createDefaultStatus, clearStatus } from './statusEffects.js';
 import { getTypeConfig } from './enemyTypes.js';
 import { MatchMemory } from './matchMemory.js';
@@ -34,6 +34,15 @@ import { generateArenaConfig } from './llama/arenaGenAgent.js';
 import { buildArenaFromConfig, updateArenaEffects, setArenaParticlePool } from './arenaBuilder.js';
 import { geminiJSON } from './geminiService.js';
 import { initAiBalancer, getAiBalanceProfile } from './aiBalancer.js';
+import { getLoreContextText } from './loreContext.js';
+import {
+  initRelicCodexSystem,
+  beginRelicIntermission,
+  dismissRelicIntermission,
+  getCombatModifiersForWave,
+  resetRelicRunState,
+  getCodexPromptContext,
+} from './relicCodex.js';
 
 // ══════════════════════════════════════════════════
 // STATE
@@ -235,10 +244,26 @@ function buildSkinFromGeminiResponse(response, promptText) {
 async function generateSkinFromPrompt(rawPrompt, signal) {
   const promptText = sanitizePromptText(rawPrompt);
   if (!promptText) return null;
+  const loreContext = getLoreContextText(1800, {
+    query: `avatar skin style colors vibe ${promptText}`,
+    channels: ['codex_milestones', 'relic_decodes'],
+    limit: 6,
+  });
+  const codexContext = getCodexPromptContext();
+  const contextParts = [];
+  if (loreContext) {
+    contextParts.push(`Gameplay memory context from relic decodes and codex milestones (optional, follow only when relevant):\n${loreContext}`);
+  }
+  if (codexContext) {
+    contextParts.push(`Codex progression context:\n${codexContext}`);
+  }
+  const userMessage = contextParts.length
+    ? `Create a skin for this avatar prompt: "${promptText}"\n\n${contextParts.join('\n\n')}`
+    : `Create a skin for this avatar prompt: "${promptText}"`;
 
   const aiResponse = await geminiJSON({
     systemPrompt: AVATAR_SKIN_SYSTEM_PROMPT,
-    userMessage: `Create a skin for this avatar prompt: "${promptText}"`,
+    userMessage,
     temperature: 0.65,
     maxTokens: 4096,
     signal,
@@ -337,6 +362,14 @@ function setSkinPromptPending(isPending) {
     _skinApplyButton.disabled = isPending;
     _skinApplyButton.textContent = isPending ? 'Generating...' : 'Apply';
   }
+}
+
+function refreshRuntimeCombatModifiers() {
+  const mods = getCombatModifiersForWave(GameState.wave);
+  setRuntimeCombatModifiers({
+    fireRateMult: mods.fireRateMult,
+    outgoingDamageMult: mods.outgoingDamageMult,
+  });
 }
 
 function initSkinUi() {
@@ -1232,6 +1265,28 @@ function init() {
     profile: getAiBalanceProfile(),
     waveApplied: 1,
   });
+  initRelicCodexSystem();
+  refreshRuntimeCombatModifiers();
+  GameState.on('wave_start', () => {
+    refreshRuntimeCombatModifiers();
+  });
+  GameState.on('wave_clear', (data) => {
+    const clearedWave = Number(data?.wave) || GameState.wave;
+    if (!Number.isFinite(clearedWave) || clearedWave <= 0) return;
+    setWaveBreakLock(true);
+    beginRelicIntermission(clearedWave)
+      .catch((err) => {
+        console.warn('Relic intermission failed:', err);
+      })
+      .finally(() => {
+        refreshRuntimeCombatModifiers();
+        setWaveBreakLock(false);
+      });
+  });
+  GameState.on('game_over', () => {
+    dismissRelicIntermission();
+    setWaveBreakLock(false);
+  });
   GameState.on('spawn_champion', (detail) => {
     spawnAdaptiveChampion(typeof detail === 'string' ? detail : '');
   });
@@ -1246,6 +1301,9 @@ function init() {
     showMessage(`${sourceLabel} balance tuned for W${waveLabel} (${trendLabel} pressure)`, 2200);
   });
   GameState.on('restart', () => {
+    resetRelicRunState();
+    refreshRuntimeCombatModifiers();
+    setWaveBreakLock(false);
     initAiBalanceHud({
       source: 'base',
       profile: getAiBalanceProfile(),
@@ -1257,7 +1315,11 @@ function init() {
   initNarrator();
 
   // Hazard damage listener
-  GameState.on('hazard_player_hit', () => {
+  GameState.on('hazard_player_hit', (detail) => {
+    const damage = Number(detail?.damage) || 0;
+    if (damage > 0) {
+      MatchMemory.recordPlayerHit(damage, player.hp);
+    }
     triggerFlash(0.15);
     updatePlayerHealthBar();
     if (player.hp <= 0) playerDeath();
@@ -1738,7 +1800,8 @@ function updateEnemies(dt) {
         const baseCd = e.typeConfig?.attackCooldown || 1.2;
         e.attackCooldown = baseCd * (combatMod?.cooldownScale || 1);
         const baseDmg = e.typeConfig?.damage || 10;
-        const dmg = baseDmg * (combatMod?.damageScale || 1);
+        const incoming = getCombatModifiersForWave(GameState.wave).incomingDamageMult || 1;
+        const dmg = baseDmg * (combatMod?.damageScale || 1) * incoming;
         if (player.invulnTimer <= 0 && player.hp > 0) {
           player.hp -= dmg;
           MatchMemory.recordPlayerHit(dmg, player.hp);

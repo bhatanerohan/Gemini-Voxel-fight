@@ -76,6 +76,17 @@
     <div id="ai-balance-pressure-fill"></div>
   </div>
 </div>
+<div id="codex-panel">
+  <div class="codex-head">
+    <span>Relic Codex</span>
+    <span id="codex-progress-text">0%</span>
+  </div>
+  <div class="codex-progress">
+    <div id="codex-progress-fill"></div>
+  </div>
+  <div id="codex-bonuses">Fire Rate +0% | Shield 0% | Weakness +0%</div>
+  <div id="codex-active-decree">No decree selected for next wave.</div>
+</div>
 
 <!-- Center announcements -->
 <div id="wave-announce"></div>
@@ -116,6 +127,24 @@
     <button id="forge-btn">Forge Weapon</button>
     <div id="forge-status"></div>
     <div id="forge-error"></div>
+  </div>
+</div>
+
+<!-- Relic Intermission -->
+<div id="intermission-overlay">
+  <div id="intermission-box">
+    <h2>Relic Drop</h2>
+    <div id="intermission-wave"></div>
+    <div id="intermission-relic-name"></div>
+    <div id="intermission-relic-flavor"></div>
+    <div class="intermission-actions">
+      <button id="relic-decode-btn" type="button">Decode Relic</button>
+      <button id="relic-skip-btn" type="button">Skip Decode</button>
+    </div>
+    <div id="intermission-relic-result"></div>
+    <h3>AI Choice Moment</h3>
+    <div id="intermission-decree-status">Fetching Gemini decrees...</div>
+    <div id="intermission-decree-list"></div>
   </div>
 </div>
 

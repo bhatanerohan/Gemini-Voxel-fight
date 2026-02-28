@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GameState } from './gameState.js';
 import { applyTheme, PRESETS, getCurrentThemeName } from './themeManager.js';
+import { getCombatModifiersForWave } from './relicCodex.js';
 
 // ── State ──
 let _scene = null;
@@ -176,10 +177,12 @@ export function updateMutations(dt) {
       const dx = _player.pos.x - h.x;
       const dz = _player.pos.z - h.z;
       if (Math.hypot(dx, dz) < HAZARD_RADIUS) {
-        _player.hp -= HAZARD_DAMAGE;
+        const incomingDamageMult = getCombatModifiersForWave(GameState.wave).incomingDamageMult || 1;
+        const hazardDamage = HAZARD_DAMAGE * incomingDamageMult;
+        _player.hp -= hazardDamage;
         _player.invulnTimer = HAZARD_DAMAGE_INTERVAL;
         h.damageCooldown = HAZARD_DAMAGE_INTERVAL;
-        GameState.emit('hazard_player_hit', { damage: HAZARD_DAMAGE });
+        GameState.emit('hazard_player_hit', { damage: hazardDamage });
       }
     }
   }

@@ -28,6 +28,8 @@ export const intervals = [];
 export let elapsed = 0;
 export let fireFn = null;
 export let lastFire = 0;
+let _fireRateMult = 1;
+let _outgoingDamageMult = 1;
 
 let _activeWeaponVisuals = null;
 export function setActiveWeaponVisuals(config) { _activeWeaponVisuals = config; }
@@ -57,6 +59,22 @@ let _getAimPoint = null;
 let _effects = {};
 let _particlePool = null;
 let _crates = [];
+
+export function setRuntimeCombatModifiers(mods = {}) {
+  if (Number.isFinite(mods.fireRateMult)) {
+    _fireRateMult = Math.max(0.35, Math.min(3, mods.fireRateMult));
+  }
+  if (Number.isFinite(mods.outgoingDamageMult)) {
+    _outgoingDamageMult = Math.max(0.2, Math.min(4, mods.outgoingDamageMult));
+  }
+}
+
+export function getRuntimeCombatModifiers() {
+  return {
+    fireRateMult: _fireRateMult,
+    outgoingDamageMult: _outgoingDamageMult,
+  };
+}
 
 export function initSandbox(scene, camera, player, enemies, getYaw, getAimPoint, effects = {}, crates = []) {
   _scene = scene;
@@ -422,6 +440,7 @@ function flashEnemyHit(e, opts = {}) {
 function damageEnemy(e, amt, flashOpts = {}) {
   if (!Number.isFinite(amt) || amt <= 0) return;
   if (e.alive === false) return;
+  amt *= _outgoingDamageMult;
   // Enemy resistance check (from identity or arena god modifier)
   const weaponLower = getActiveWeaponName().toLowerCase();
   const resistance = e.identity?.resistance || e.resistType;
@@ -1041,7 +1060,8 @@ export function tickFrame() { _frameCounter++; _cachedEnemyWraps = null; }
 // ── Fire weapon ──
 export function fire() {
   if (!fireFn) return;
-  if (elapsed - lastFire < 0.05) return;
+  const minFireInterval = 0.05 / Math.max(0.35, _fireRateMult);
+  if (elapsed - lastFire < minFireInterval) return;
   lastFire = elapsed;
   if (_ctxFrame !== _frameCounter) {
     _cachedCtx = createSafeContext(buildCtx());
@@ -1152,6 +1172,5 @@ export function resetSandbox() {
   cbs.length = 0; timers.length = 0; intervals.length = 0;
   fireFn = null;
 }
-
 
 
