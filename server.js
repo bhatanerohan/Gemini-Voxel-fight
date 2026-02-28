@@ -7,6 +7,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
 const GEMINI_TARGET = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions';
+const GEMINI_TTS_TARGET = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent';
 const LLAMA_CLOUD_API_KEY = process.env.LLAMA_CLOUD_API_KEY || '';
 const LLAMAPARSE_UPLOAD_URL = 'https://api.cloud.llamaindex.ai/api/v2/parse/upload';
 const LLAMAPARSE_JOB_URL = 'https://api.cloud.llamaindex.ai/api/v2/parse';
@@ -19,6 +20,13 @@ const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || '*';
 const rateLimitMap = new Map();
 const RATE_LIMIT_WINDOW_MS = 60000; // 1 minute
 const RATE_LIMIT_MAX = 20; // max requests per window
+
+const TTS_VOICES = new Set([
+  'Zephyr', 'Puck', 'Charon', 'Kore', 'Fenrir', 'Leda',
+  'Orus', 'Aoede', 'Callirrhoe', 'Autonoe', 'Enceladus', 'Iapetus',
+  'Umbriel', 'Algieba', 'Despina', 'Erinome', 'Algenib', 'Rasalgethi',
+  'Laomedeia', 'Achernar', 'Alnilam', 'Schedar', 'Gacrux', 'Pulcherrima',
+]);
 
 function rateLimit(req, res, next) {
   const ip = req.ip || req.connection.remoteAddress;
@@ -60,6 +68,30 @@ function decodeBase64ToBuffer(base64) {
   } catch (_) {
     return null;
   }
+}
+
+function pcm16ToWavBuffer(pcmBuffer, sampleRate = 24000, channels = 1) {
+  const bytesPerSample = 2;
+  const byteRate = sampleRate * channels * bytesPerSample;
+  const blockAlign = channels * bytesPerSample;
+  const dataSize = pcmBuffer.length;
+  const header = Buffer.alloc(44);
+
+  header.write('RIFF', 0);
+  header.writeUInt32LE(36 + dataSize, 4);
+  header.write('WAVE', 8);
+  header.write('fmt ', 12);
+  header.writeUInt32LE(16, 16); // PCM chunk size
+  header.writeUInt16LE(1, 20); // audio format = PCM
+  header.writeUInt16LE(channels, 22);
+  header.writeUInt32LE(sampleRate, 24);
+  header.writeUInt32LE(byteRate, 28);
+  header.writeUInt16LE(blockAlign, 32);
+  header.writeUInt16LE(16, 34); // bits per sample
+  header.write('data', 36);
+  header.writeUInt32LE(dataSize, 40);
+
+  return Buffer.concat([header, pcmBuffer]);
 }
 
 function extractParseText(payload) {
@@ -232,6 +264,108 @@ app.post('/gemini/chat/completions', rateLimit, async (req, res) => {
     if (!res.headersSent) {
       res.status(502).json({ error: { message: 'Failed to reach Gemini API' } });
     }
+  }
+});
+
+app.post('/gemini/tts', rateLimit, async (req, res) => {
+  if (!GEMINI_API_KEY) {
+    return res.status(500).json({ error: { message: 'GEMINI_API_KEY not configured on server' } });
+  }
+
+  let payload = null;
+  const hasGeminiPayload = Array.isArray(req.body?.contents);
+
+  if (hasGeminiPayload) {
+    payload = req.body;
+    payload.generationConfig = payload.generationConfig || {};
+    payload.generationConfig.responseModalities = ['AUDIO'];
+    payload.generationConfig.speechConfig = payload.generationConfig.speechConfig || {};
+    payload.generationConfig.speechConfig.voiceConfig = payload.generationConfig.speechConfig.voiceConfig || {};
+    payload.generationConfig.speechConfig.voiceConfig.prebuiltVoiceConfig =
+      payload.generationConfig.speechConfig.voiceConfig.prebuiltVoiceConfig || {};
+
+    const voiceRaw = safeString(payload.generationConfig.speechConfig.voiceConfig.prebuiltVoiceConfig.voiceName).trim();
+    payload.generationConfig.speechConfig.voiceConfig.prebuiltVoiceConfig.voiceName =
+      TTS_VOICES.has(voiceRaw) ? voiceRaw : 'Kore';
+  } else {
+    const text = safeString(req.body?.text).trim();
+    if (!text) {
+      return res.status(400).json({ error: { message: 'Invalid request: text is required' } });
+    }
+    if (text.length > 320) {
+      return res.status(400).json({ error: { message: 'Text too long (max 320 chars).' } });
+    }
+
+    const voiceNameRaw = safeString(req.body?.voiceName).trim();
+    const voiceName = TTS_VOICES.has(voiceNameRaw) ? voiceNameRaw : 'Kore';
+    const mood = safeString(req.body?.mood, 'epic').toLowerCase();
+    const pace = Math.max(0.75, Math.min(1.3, Number(req.body?.rate) || 1));
+
+    const moodStyle = ({
+      epic: 'Narrate with cinematic weight and confidence.',
+      ominous: 'Narrate in a tense, ominous tone.',
+      triumphant: 'Narrate with energetic triumph and momentum.',
+      desperate: 'Narrate with urgency and strain.',
+      quiet: 'Narrate softly but clearly.',
+    })[mood] || 'Narrate clearly with dramatic pacing.';
+
+    const paceStyle = pace > 1.08
+      ? 'Keep delivery brisk.'
+      : pace < 0.92
+        ? 'Keep delivery measured and deliberate.'
+        : 'Keep delivery natural.';
+
+    const ttsPrompt = `${moodStyle} ${paceStyle} Speak this exact line: "${text}"`;
+    payload = {
+      contents: [{
+        parts: [{ text: ttsPrompt }],
+      }],
+      generationConfig: {
+        responseModalities: ['AUDIO'],
+        speechConfig: {
+          voiceConfig: {
+            prebuiltVoiceConfig: { voiceName },
+          },
+        },
+      },
+    };
+  }
+
+  try {
+    const upstream = await fetch(GEMINI_TTS_TARGET, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': GEMINI_API_KEY,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!upstream.ok) {
+      const body = await upstream.text().catch(() => '');
+      return res.status(upstream.status).json({
+        error: { message: `Gemini TTS failed (${upstream.status}): ${body.slice(0, 220)}` },
+      });
+    }
+
+    const payload = await upstream.json().catch(() => null);
+    const parts = payload?.candidates?.[0]?.content?.parts;
+    const audioPart = Array.isArray(parts)
+      ? parts.find(p => typeof p?.inlineData?.data === 'string' && p.inlineData.data)
+      : null;
+    const base64 = audioPart?.inlineData?.data || '';
+    const pcm = decodeBase64ToBuffer(base64);
+    if (!pcm || !pcm.length) {
+      return res.status(502).json({ error: { message: 'Gemini TTS returned empty audio.' } });
+    }
+
+    const wav = pcm16ToWavBuffer(pcm, 24000, 1);
+    res.setHeader('Content-Type', 'audio/wav');
+    res.setHeader('Cache-Control', 'no-store');
+    return res.send(wav);
+  } catch (err) {
+    console.error('Gemini TTS proxy error:', err?.message || err);
+    return res.status(502).json({ error: { message: 'Failed to reach Gemini TTS API' } });
   }
 });
 
