@@ -8,12 +8,14 @@ import { generateEnemyIdentities, applyIdentity } from './enemyIdentity.js';
 import { pickEnemyType, getTypeConfig } from './enemyTypes.js';
 import { clearStatus } from './statusEffects.js';
 import { getAiBalanceProfile } from './aiBalancer.js';
+import { getEnemyWaveModifiersForWave } from './relicCodex.js';
 
 let _scene = null;
 let _enemies = [];
 let _createEnemyFn = null;
 let restTimer = 0;
 let waveActive = false;
+let intermissionLocked = false;
 const REST_DURATION = 6; // seconds between waves
 
 const WAVE_CONFIG = {
@@ -34,10 +36,12 @@ export function initWaves(scene, enemies, createEnemyFn) {
   _createEnemyFn = createEnemyFn;
   waveActive = false;
   restTimer = 0;
+  intermissionLocked = false;
 
   GameState.on('restart', () => {
     waveActive = false;
     restTimer = 0;
+    intermissionLocked = false;
     // Clear all enemies
     for (const e of _enemies) {
       e.mesh.visible = false;
@@ -57,19 +61,29 @@ export function startNextWave() {
   playWaveStart();
 
   const balance = getAiBalanceProfile();
+  const decreeEffects = getEnemyWaveModifiersForWave(wave);
+  const effectiveBalance = {
+    ...balance,
+    spawnCountMult: (balance.spawnCountMult || 1) * (decreeEffects.spawnCountMult || 1),
+    enemyHpMult: (balance.enemyHpMult || 1) * (decreeEffects.enemyHpMult || 1),
+    enemySpeedMult: (balance.enemySpeedMult || 1) * (decreeEffects.enemySpeedMult || 1),
+    enemyDamageMult: (balance.enemyDamageMult || 1) * (decreeEffects.enemyDamageMult || 1),
+    enemyCooldownMult: (balance.enemyCooldownMult || 1) * (decreeEffects.enemyCooldownMult || 1),
+  };
 
   // Calculate enemy count for this wave
   const baseCount = WAVE_CONFIG.baseCount + (wave - 1) * WAVE_CONFIG.countPerWave;
   const count = Math.min(
     WAVE_CONFIG.maxEnemies,
-    Math.max(1, Math.round(baseCount * (balance.spawnCountMult || 1)))
+    Math.max(1, Math.round(baseCount * (effectiveBalance.spawnCountMult || 1)))
   );
-  const hp = (WAVE_CONFIG.baseHp + (wave - 1) * WAVE_CONFIG.hpPerWave) * (balance.enemyHpMult || 1);
-  const speedMult = (WAVE_CONFIG.baseSpeed + (wave - 1) * WAVE_CONFIG.speedPerWave) * (balance.enemySpeedMult || 1);
+  const hp = (WAVE_CONFIG.baseHp + (wave - 1) * WAVE_CONFIG.hpPerWave) * (effectiveBalance.enemyHpMult || 1);
+  const speedMult = (WAVE_CONFIG.baseSpeed + (wave - 1) * WAVE_CONFIG.speedPerWave) * (effectiveBalance.enemySpeedMult || 1);
 
   // Spawn/reuse enemies
-  spawnWaveEnemies(count, hp, speedMult, balance);
+  spawnWaveEnemies(count, hp, speedMult, effectiveBalance);
   waveActive = true;
+  intermissionLocked = false;
 
   // Guaranteed boss moments so learning champion appears even without Arena God mutation.
   if (wave >= 3 && wave % 3 === 0) {
@@ -187,11 +201,12 @@ export function updateWaves(dt) {
       showWaveClear();
       GameState.addScore(GameState.wave * 100); // wave clear bonus
       restTimer = REST_DURATION;
-      if (GameState.wave >= 2) {
-        showMessage('Press T to forge a weapon!', 3000);
+      if (GameState.wave >= 1) {
+        showMessage('Relic dropped: decode and choose one decree.', 3200);
       }
     }
   } else if (GameState.phase === 'waveBreak') {
+    if (intermissionLocked) return;
     restTimer -= dt;
     if (restTimer <= 0) {
       startNextWave();
@@ -200,3 +215,4 @@ export function updateWaves(dt) {
 }
 
 export function isWaveActive() { return waveActive; }
+export function setWaveBreakLock(locked) { intermissionLocked = !!locked; }

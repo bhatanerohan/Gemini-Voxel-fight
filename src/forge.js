@@ -5,6 +5,8 @@ import { validateWeaponCode } from './weaponValidator.js';
 import { MatchMemory } from './matchMemory.js';
 import { geminiText } from './geminiService.js';
 import { generateWeaponVisuals } from './llama/weaponVisualsAgent.js';
+import { getLoreContextText } from './loreContext.js';
+import { getCodexPromptContext } from './relicCodex.js';
 
 let forgeOpen = false;
 let onOpenCb = null;
@@ -230,10 +232,32 @@ ctx.spawn(mesh, {
 }
 
 function buildForgeCoderInput(prompt, attempt, previousErrors = []) {
+  const lore = getLoreContextText(2800, {
+    query: `weapon design behavior balance theme ${prompt}`,
+    channels: ['codex_milestones', 'relic_decodes'],
+    limit: 8,
+  });
+  const codex = getCodexPromptContext();
   const base = `## PLAYER WEAPON REQUEST:
 "${prompt}"
 
 Implement a weapon that matches this request. Infer missing details if needed. Output ONLY the function body code.`;
+  const loreBlock = lore
+    ? `
+
+## GAMEPLAY MEMORY CONTEXT (RELIC + CODEX):
+${lore}
+
+Use this context when naming mechanics, visuals, and behavior.`
+    : '';
+  const codexBlock = codex
+    ? `
+
+## CODEX STATE:
+${codex}
+
+Use codex perks/decree only as thematic guidance; still obey safety constraints.`
+    : '';
 
   const constraints = `
 
@@ -245,9 +269,11 @@ MANDATORY CONSTRAINTS:
 - Use only ctx APIs and local variables.
 `;
 
-  if (attempt <= 1 || previousErrors.length === 0) return `${base}${constraints}`;
+  if (attempt <= 1 || previousErrors.length === 0) return `${base}${loreBlock}${codexBlock}${constraints}`;
 
   return `${base}
+${loreBlock}
+${codexBlock}
 
 Previous attempt was rejected for:
 - ${previousErrors.join('\n- ')}
