@@ -21,12 +21,34 @@ import { initArenaGod } from './arenaGod.js';
 import { saveSessionSummary } from './sessionMemory.js';
 import { generateChronicle, displayChronicle, hideChronicle } from './warChronicle.js';
 import { initMutations, updateMutations } from './arenaMutations.js';
+import { initThemeManager, applyThemeInstant, PRESETS } from './themeManager.js';
+import { initThemeUI } from './themeUI.js';
+import { applyAvatarConfig, updateAvatarEffects, getAvatarConcept, resetAvatar, setAvatarParticlePool } from './avatarBuilder.js';
+import { initAvatarUI, showAvatarUI } from './avatarUI.js';
+import { initNarrator, showNarratorLine } from './narratorUI.js';
+import { getNarratorLine, preWarmNarrator } from './llama/narratorAgent.js';
+import { getDamageMutation, preGenerateMutations, clearMutationCache } from './llama/damageMutationAgent.js';
+import { applyDamageMutation, updateDamageEffects, checkDamageThreshold, clearDamageMutations, setDamageParticlePool } from './damageMutations.js';
+import { generateArenaConfig } from './llama/arenaGenAgent.js';
+import { buildArenaFromConfig, updateArenaEffects, setArenaParticlePool } from './arenaBuilder.js';
 
 // ══════════════════════════════════════════════════
 // STATE
 // ══════════════════════════════════════════════════
 let renderer, labelRenderer, scene, camera, composer;
 const coverBlockMeshes = [];
+let _groundMesh, _gridHelper, _boundaryMat, _coverMat, _platformMat, _accentMat;
+let _sunLight, _ambientLight, _hemiLight, _bloomPass;
+
+export function getSceneRefs() {
+  return {
+    scene, groundMesh: _groundMesh, gridHelper: _gridHelper,
+    boundaryMat: _boundaryMat, coverMat: _coverMat,
+    platformMat: _platformMat, accentMat: _accentMat,
+    sunLight: _sunLight, ambientLight: _ambientLight,
+    hemiLight: _hemiLight, bloomPass: _bloomPass,
+  };
+}
 let keys = {};
 let mouseDown = false;
 let playerYaw = 0;
@@ -669,51 +691,53 @@ function init() {
   try {
     composer = new EffectComposer(renderer);
     composer.addPass(new RenderPass(scene, camera));
-    const bloom = new UnrealBloomPass(
+    _bloomPass = new UnrealBloomPass(
       new THREE.Vector2(innerWidth, innerHeight), 0.8, 0.3, 0.3
     );
-    composer.addPass(bloom);
+    composer.addPass(_bloomPass);
   } catch (e) {
     console.warn('Bloom not available:', e);
     composer = null;
   }
 
   // Lights
-  scene.add(new THREE.AmbientLight(0x223344, 0.6));
-  const sun = new THREE.DirectionalLight(0xffeedd, 1.0);
-  sun.position.set(30, 50, 20);
-  sun.castShadow = true;
-  sun.shadow.mapSize.set(2048, 2048);
-  const sc = sun.shadow.camera;
+  _ambientLight = new THREE.AmbientLight(0x223344, 0.6);
+  scene.add(_ambientLight);
+  _sunLight = new THREE.DirectionalLight(0xffeedd, 1.0);
+  _sunLight.position.set(30, 50, 20);
+  _sunLight.castShadow = true;
+  _sunLight.shadow.mapSize.set(2048, 2048);
+  const sc = _sunLight.shadow.camera;
   sc.left = sc.bottom = -60;
   sc.right = sc.top = 60;
-  scene.add(sun);
-  scene.add(new THREE.HemisphereLight(0x4488ff, 0x221111, 0.3));
+  scene.add(_sunLight);
+  _hemiLight = new THREE.HemisphereLight(0x4488ff, 0x221111, 0.3);
+  scene.add(_hemiLight);
 
   // Ground
-  const gnd = new THREE.Mesh(
+  _groundMesh = new THREE.Mesh(
     new THREE.PlaneGeometry(200, 200),
     new THREE.MeshStandardMaterial({ color: 0x0e0e1a, roughness: 0.9, metalness: 0.1 })
   );
-  gnd.rotation.x = -Math.PI / 2;
-  gnd.receiveShadow = true;
-  scene.add(gnd);
+  _groundMesh.rotation.x = -Math.PI / 2;
+  _groundMesh.receiveShadow = true;
+  scene.add(_groundMesh);
 
   // Grid
-  const grid = new THREE.GridHelper(200, 100, 0x1a1a44, 0x111128);
-  grid.position.y = 0.02;
-  grid.material.opacity = 0.35;
-  grid.material.transparent = true;
-  scene.add(grid);
+  _gridHelper = new THREE.GridHelper(200, 100, 0x1a1a44, 0x111128);
+  _gridHelper.position.y = 0.02;
+  _gridHelper.material.opacity = 0.35;
+  _gridHelper.material.transparent = true;
+  scene.add(_gridHelper);
 
   // Arena boundary — glowing neon strips
-  const stripMat = new THREE.MeshStandardMaterial({
+  _boundaryMat = new THREE.MeshStandardMaterial({
     color: 0x0088ff, emissive: 0x003388, emissiveIntensity: 0.7,
     roughness: 0.2, metalness: 0.8,
   });
   [[0, 0.15, -50.2, 100, 0.3, 0.4], [0, 0.15, 50.2, 100, 0.3, 0.4],
    [-50.2, 0.15, 0, 0.4, 0.3, 100], [50.2, 0.15, 0, 0.4, 0.3, 100]].forEach(([x,y,z,sx,sy,sz]) => {
-    const m = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), stripMat);
+    const m = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), _boundaryMat);
     m.position.set(x, y, z);
     scene.add(m);
   });
@@ -729,9 +753,9 @@ function init() {
   });
 
   // ── Arena Obstacles ──
-  const obstacleMat = new THREE.MeshStandardMaterial({ color: 0x252540, roughness: 0.6, metalness: 0.3 });
-  const platformMat = new THREE.MeshStandardMaterial({ color: 0x2a2a50, roughness: 0.5, metalness: 0.4 });
-  const accentMat = new THREE.MeshStandardMaterial({
+  _coverMat = new THREE.MeshStandardMaterial({ color: 0x252540, roughness: 0.6, metalness: 0.3 });
+  _platformMat = new THREE.MeshStandardMaterial({ color: 0x2a2a50, roughness: 0.5, metalness: 0.4 });
+  _accentMat = new THREE.MeshStandardMaterial({
     color: 0x003366, emissive: 0x001133, emissiveIntensity: 0.3, roughness: 0.3, metalness: 0.6
   });
 
@@ -744,7 +768,7 @@ function init() {
   ];
 
   coverBlocks.forEach(([x, z, sx, sy, sz]) => {
-    const m = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), obstacleMat);
+    const m = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), _coverMat);
     m.position.set(x, sy / 2, z);
     m.castShadow = true;
     m.receiveShadow = true;
@@ -759,17 +783,22 @@ function init() {
     { x: -35, z: -35, w: 8, h: 1.5, d: 8 },
     { x: 35, z: 35, w: 8, h: 1.5, d: 8 },
   ].forEach(({ x, z, w, h, d }) => {
-    const plat = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), platformMat);
+    const plat = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), _platformMat);
     plat.position.set(x, h / 2, z);
     plat.castShadow = true;
     plat.receiveShadow = true;
     scene.add(plat);
     cameraCollisionMeshes.push(plat);
     aimCollisionMeshes.push(plat);
-    const strip = new THREE.Mesh(new THREE.BoxGeometry(w + 0.2, 0.1, d + 0.2), accentMat);
+    const strip = new THREE.Mesh(new THREE.BoxGeometry(w + 0.2, 0.1, d + 0.2), _accentMat);
     strip.position.set(x, h + 0.05, z);
     scene.add(strip);
   });
+
+  // ── Theme system ──
+  initThemeManager(getSceneRefs());
+  applyThemeInstant(PRESETS.neon);
+  initThemeUI();
 
   // Player - voxel human
   player.mesh = createVoxelHumanoid({
@@ -843,10 +872,6 @@ function init() {
   initSandbox(scene, camera, player, enemies, () => playerYaw, () => getPlayerAimPoint(), { triggerSlowMo, triggerFlash }, arenaProps);
   MatchMemory.setWeaponGetter(getActiveWeaponName);
 
-  // Init wave system
-  initWaves(scene, enemies, null);
-  setTimeout(() => startNextWave(), 1500);
-
   // Init forge UI
   initForge({
     onOpen: () => { mouseDown = false; },
@@ -861,14 +886,73 @@ function init() {
   initArenaGod();
   initMutations(scene, coverBlockMeshes, player, enemies);
 
+  // Init narrator
+  initNarrator();
+
   // Hazard damage listener
   GameState.on('hazard_player_hit', () => {
     triggerFlash(0.15);
     updatePlayerHealthBar();
     if (player.hp <= 0) playerDeath();
   });
+
+  // Narrator hooks
+  GameState.on('wave_clear', (data) => {
+    setTimeout(() => {
+      getNarratorLine('wave_clear', `wave ${GameState.wave} cleared`).then(r => {
+        if (r?.line) showNarratorLine(r.line, r.mood);
+      });
+    }, 2500); // Delay after Arena God
+  });
+  GameState.on('multi_kill', () => {
+    getNarratorLine('multi_kill', 'multiple enemies killed rapidly').then(r => {
+      if (r?.line) showNarratorLine(r.line, r.mood);
+    });
+  });
+  GameState.on('player_near_death', () => {
+    getNarratorLine('near_death', 'player at critical health').then(r => {
+      if (r?.line) showNarratorLine(r.line, r.mood, 4000);
+    });
+  });
+
   refreshLevelHUD();
   applyCrosshairReward();
+
+  // ── Avatar Selection: defer game start until avatar chosen ──
+  initAvatarUI((avatarConfig) => {
+    // Apply avatar to player mesh
+    applyAvatarConfig(player.mesh, avatarConfig);
+
+    // Show avatar personality as narrator line
+    if (avatarConfig.personality) {
+      showNarratorLine(avatarConfig.personality, 'epic', 3000);
+    }
+
+    // Pre-generate damage mutations in background
+    preGenerateMutations(avatarConfig.name);
+
+    // Pre-warm narrator cache in background
+    preWarmNarrator();
+
+    // Generate arena (non-blocking, applies when ready)
+    generateArenaConfig(1, avatarConfig.name).then(arenaConfig => {
+      if (arenaConfig && arenaConfig.theme.name !== 'Default Arena') {
+        buildArenaFromConfig(scene, arenaConfig, coverBlockMeshes, [
+          ...cameraCollisionMeshes,
+          ...aimCollisionMeshes,
+        ]);
+        // Show arena name via narrator
+        if (arenaConfig.narrativeIntro) {
+          setTimeout(() => showNarratorLine(arenaConfig.narrativeIntro, 'ominous', 4000), 3500);
+        }
+      }
+    });
+
+    // Start the game
+    initWaves(scene, enemies, null);
+    setTimeout(() => startNextWave(), 1500);
+  });
+  showAvatarUI();
 
   // Input
   setupInput();
@@ -919,6 +1003,8 @@ function init() {
     updateTrails(dt);
     updateSandboxTimers(dt);
     updateParticles(dt);
+    updateAvatarEffects(player.mesh, dt);
+    updateDamageEffects(player.mesh, dt);
     updateHealthBars();
     updateWaves(dt);
     updateMutations(dt);
@@ -1000,6 +1086,10 @@ function restartGame() {
     e.mesh.visible = true;
     e.attackCooldown = 0;
   }
+  // Reset damage mutations
+  clearDamageMutations(player.mesh);
+  clearMutationCache();
+
   // Reset reactive arena props
   for (const c of arenaProps) {
     c.hp = c.maxHp;
@@ -1154,6 +1244,16 @@ function updateEnemies(dt) {
           triggerFlash(0.2);
           setShake(0.4, 0.2);
           updatePlayerHealthBar();
+
+          // Damage-reactive avatar mutations
+          const healthPct = (player.hp / player.maxHp) * 100;
+          const threshold = checkDamageThreshold(healthPct);
+          if (threshold) {
+            getDamageMutation(getAvatarConcept(), healthPct).then(mutation => {
+              if (mutation) applyDamageMutation(player.mesh, mutation);
+            });
+          }
+
           if (player.hp <= 0) {
             playerDeath();
           }
@@ -1259,7 +1359,7 @@ function updateCamera(dt) {
 // ══════════════════════════════════════════════════
 function setupInput() {
   window.addEventListener('keydown', (e) => {
-    if (isForgeOpen()) return;
+    if (isForgeOpen() || window._blockGameInput) return;
     keys[e.key.toLowerCase()] = true;
     if (e.key >= '1' && e.key <= '4') {
       switchWeapon(parseInt(e.key) - 1);

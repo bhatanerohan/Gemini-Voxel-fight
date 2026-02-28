@@ -9,8 +9,13 @@
     "dev:server": "node server.js"
   },
   "dependencies": {
+    "@llamaindex/openai": "^0.4.22",
+    "@llamaindex/workflow": "^1.1.24",
+    "dotenv": "^17.3.1",
     "express": "^4.21.0",
-    "three": "^0.128.0"
+    "llamaindex": "^0.12.1",
+    "three": "^0.128.0",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "playwright": "^1.58.2",

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { GameState } from './gameState.js';
+import { applyTheme, PRESETS, getCurrentThemeName } from './themeManager.js';
 
 // ── State ──
 let _scene = null;
@@ -9,16 +10,7 @@ let _player = null;
 let _enemies = null;
 let _removedCount = 0;
 let _removedBlocks = []; // { mesh, originalScaleY, originalPosY }
-let _currentTheme = 'default';
 let _elapsed = 0;
-
-const THEMES = {
-  default: { bg: 0x060612, fog: 0x060612 },
-  lava:    { bg: 0x120606, fog: 0x120606 },
-  ice:     { bg: 0x061212, fog: 0x061212 },
-  void:    { bg: 0x040410, fog: 0x040410 },
-};
-const THEME_KEYS = Object.keys(THEMES);
 
 const MAX_COVER_REMOVALS = 4;
 const MAX_HAZARDS = 3;
@@ -38,7 +30,6 @@ export function initMutations(scene, coverBlocks, player, enemies) {
   _removedBlocks = [];
   _hazardZones = [];
   _sinkingBlocks = [];
-  _currentTheme = 'default';
   _elapsed = 0;
 
   GameState.on('god_mutation', (mutation) => executeMutation(mutation));
@@ -143,15 +134,11 @@ function addHazard() {
 }
 
 function themeShift() {
-  const idx = THEME_KEYS.indexOf(_currentTheme);
-  const nextIdx = (idx + 1) % THEME_KEYS.length;
-  _currentTheme = THEME_KEYS[nextIdx];
-  const theme = THEMES[_currentTheme];
-
-  if (_scene) {
-    _scene.background.setHex(theme.bg);
-    if (_scene.fog) _scene.fog.color.setHex(theme.fog);
-  }
+  const keys = Object.keys(PRESETS);
+  const current = getCurrentThemeName();
+  const others = keys.filter(k => PRESETS[k].name !== current);
+  const pick = others[Math.floor(Math.random() * others.length)] || keys[0];
+  applyTheme(PRESETS[pick]);
 }
 
 export function updateMutations(dt) {
@@ -247,13 +234,8 @@ function resetMutations() {
   }
   _hazardZones = [];
 
-  // Reset theme
-  _currentTheme = 'default';
-  const theme = THEMES.default;
-  if (_scene) {
-    _scene.background.setHex(theme.bg);
-    if (_scene.fog) _scene.fog.color.setHex(theme.fog);
-  }
+  // Reset theme to neon via themeManager
+  applyTheme(PRESETS.neon);
 
   _elapsed = 0;
 }

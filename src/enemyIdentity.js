@@ -1,53 +1,14 @@
-// src/enemyIdentity.js — Enemy Identity System (WS-A5)
+// src/enemyIdentity.js — Enemy Identity System (Enhanced with LlamaIndex Agent)
 import { MatchMemory } from './matchMemory.js';
-import { geminiJSON } from './geminiService.js';
 import { GameState } from './gameState.js';
+import { generateEnemyDesigns } from './llama/enemyDesignAgent.js';
 
 const usedNames = new Set();
-
-const SYSTEM_PROMPT = `You are generating enemy identities for a voxel arena combat game. Each enemy gets a unique personality.
-
-Rules:
-- name: 1 word, 4-8 letters, alien/warrior sounding. Never repeat names within a match.
-- epithet: short title like "the Bold", "Frostbitten", "Vex's Avenger"
-- taunt: 1 short sentence the enemy says when spotting the player
-- lastWords: 1 short dramatic sentence said on death
-- grudge: null OR reference a fallen comrade by name (only after wave 2, 1-2 enemies max)
-- resistance: null OR a weapon type like "freeze", "fire" (only if player favors a weapon type, 1 enemy max)
-- personality: one of "reckless", "cautious", "vengeful"
-
-Keep all text short — these display in small UI elements.
-
-Respond with ONLY valid JSON in this format:
-{
-  "enemies": [
-    { "name": "Kira", "epithet": "the Bold", "personality": "reckless", "taunt": "You'll fall like the rest!", "lastWords": "I didn't expect... the cold...", "grudge": null, "resistance": null }
-  ]
-}`;
 
 export async function generateEnemyIdentities(wave, count) {
   try {
     const context = MatchMemory.buildGeminiContext();
-    const fallenNames = MatchMemory.enemyDeaths
-      .filter(d => d.name)
-      .map(d => d.name);
-    const usedList = Array.from(usedNames);
-
-    const userMessage = `Wave ${wave}, generate ${count} enemy identities.
-
-Match context: ${context}
-
-Already used names (do NOT reuse): ${usedList.join(', ') || 'none'}
-Recently fallen enemies: ${fallenNames.slice(-6).join(', ') || 'none'}
-
-${wave >= 3 && fallenNames.length > 0 ? `1-2 enemies should have a grudge referencing a fallen comrade.` : 'No grudges needed yet.'}`;
-
-    const result = await geminiJSON({
-      systemPrompt: SYSTEM_PROMPT,
-      userMessage,
-      temperature: 1.0,
-      maxTokens: 1500,
-    });
+    const result = await generateEnemyDesigns(wave, count, context);
 
     if (!result?.enemies || !Array.isArray(result.enemies)) return [];
 
@@ -80,6 +41,33 @@ export function applyIdentity(enemy, identity) {
     personality: identity.personality || 'reckless',
     hasTaunted: false,
   };
+
+  // Apply AI-generated visual config if present
+  if (identity.visual) {
+    try {
+      const v = identity.visual;
+      if (v.primaryColor && enemy.bodyMesh?.material) {
+        enemy.bodyMesh.material.color.set(v.primaryColor);
+      }
+      if (v.glowColor && enemy.bodyMesh?.material?.emissive) {
+        enemy.bodyMesh.material.emissive.set(v.glowColor);
+        enemy.bodyMesh.material.emissiveIntensity = 0.15;
+      }
+      // Apply visor color
+      const rig = enemy.mesh?.userData?.rig;
+      if (rig?.visor?.material && v.visorColor) {
+        rig.visor.material.color.set(v.visorColor);
+        rig.visor.material.emissive.set(v.visorColor);
+        rig.visor.material.emissiveIntensity = 0.3;
+      }
+      // Apply scale
+      if (v.scale && rig?.root) {
+        rig.root.scale.setScalar(Math.min(2, Math.max(0.7, v.scale)));
+      }
+    } catch (e) {
+      // Silently ignore visual errors — gameplay continues
+    }
+  }
 }
 
 export function getEnemyDisplayName(enemy) {

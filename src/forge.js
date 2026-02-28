@@ -1,9 +1,10 @@
-import { setWeapon } from './sandbox.js';
+import { setWeapon, setActiveWeaponVisuals } from './sandbox.js';
 import { CODER_PROMPT } from './prompt.js';
 import { playForgeOpen, playForgeComplete } from './audio.js';
 import { validateWeaponCode } from './weaponValidator.js';
 import { MatchMemory } from './matchMemory.js';
 import { geminiText } from './geminiService.js';
+import { generateWeaponVisuals } from './llama/weaponVisualsAgent.js';
 
 let forgeOpen = false;
 let onOpenCb = null;
@@ -74,6 +75,11 @@ export function initForge(callbacks = {}) {
       const fn = new Function('ctx', cleanCode);
       setWeapon(fn, prompt, cleanCode);
       MatchMemory.recordWeaponForge(prompt);
+
+      // Generate weapon visuals in background (non-blocking)
+      generateWeaponVisuals(prompt).then(visuals => {
+        if (visuals) setActiveWeaponVisuals(visuals);
+      });
       status.textContent = 'Weapon ready!';
       status.className = 'forge-success';
       playForgeComplete();

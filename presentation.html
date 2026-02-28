@@ -1,0 +1,947 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Voxel Arena — Gemini Hackathon Presentation</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg: #0a0a0f;
+  --surface: #12121a;
+  --card: #1a1a2e;
+  --accent: #4f46e5;
+  --accent2: #7c3aed;
+  --gemini-blue: #4285f4;
+  --gemini-red: #ea4335;
+  --gemini-yellow: #fbbc04;
+  --gemini-green: #34a853;
+  --neon-cyan: #22d3ee;
+  --neon-pink: #f472b6;
+  --neon-orange: #fb923c;
+  --text: #e2e8f0;
+  --muted: #94a3b8;
+  --dim: #475569;
+}
+
+html, body {
+  width: 100%; height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Space Grotesk', sans-serif;
+}
+
+/* ── Slide Container ── */
+.deck {
+  width: 100%; height: 100%;
+  position: relative;
+}
+.slide {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column;
+  justify-content: center; align-items: center;
+  padding: 60px 80px;
+  opacity: 0;
+  transform: translateY(40px) scale(0.97);
+  transition: opacity 0.5s ease, transform 0.5s ease;
+  pointer-events: none;
+  overflow: hidden;
+}
+.slide.active {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: all;
+}
+
+/* ── Background Effects ── */
+.slide::before {
+  content: '';
+  position: absolute; inset: 0;
+  background:
+    radial-gradient(ellipse 80% 60% at 20% 10%, rgba(79,70,229,0.08) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 50% at 80% 90%, rgba(124,58,237,0.06) 0%, transparent 60%);
+  pointer-events: none;
+}
+
+/* ── Grid Overlay ── */
+.grid-bg {
+  position: absolute; inset: 0;
+  background-image:
+    linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+  background-size: 60px 60px;
+  pointer-events: none;
+}
+
+/* ── Typography ── */
+h1 { font-size: 3.2rem; font-weight: 700; line-height: 1.15; letter-spacing: -0.02em; }
+h2 { font-size: 2.4rem; font-weight: 600; line-height: 1.2; letter-spacing: -0.01em; }
+h3 { font-size: 1.5rem; font-weight: 500; color: var(--muted); }
+p, li { font-size: 1.25rem; line-height: 1.7; color: var(--muted); }
+.mono { font-family: 'JetBrains Mono', monospace; }
+
+/* ── Common Components ── */
+.badge {
+  display: inline-block;
+  padding: 6px 16px;
+  border-radius: 99px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.badge-gemini {
+  background: linear-gradient(135deg, var(--gemini-blue), var(--gemini-red), var(--gemini-yellow), var(--gemini-green));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  border: 1px solid rgba(66,133,244,0.3);
+}
+.badge-accent {
+  background: rgba(79,70,229,0.15);
+  color: var(--accent);
+  border: 1px solid rgba(79,70,229,0.3);
+}
+.badge-cyan {
+  background: rgba(34,211,238,0.1);
+  color: var(--neon-cyan);
+  border: 1px solid rgba(34,211,238,0.25);
+}
+.badge-pink {
+  background: rgba(244,114,182,0.1);
+  color: var(--neon-pink);
+  border: 1px solid rgba(244,114,182,0.25);
+}
+.badge-orange {
+  background: rgba(251,146,60,0.1);
+  color: var(--neon-orange);
+  border: 1px solid rgba(251,146,60,0.25);
+}
+
+.gradient-text {
+  background: linear-gradient(135deg, #818cf8, #c084fc, #f472b6);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+}
+.gemini-gradient {
+  background: linear-gradient(135deg, var(--gemini-blue), var(--gemini-red), var(--gemini-yellow), var(--gemini-green));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 16px;
+  padding: 28px 32px;
+  backdrop-filter: blur(12px);
+}
+.card-glow {
+  box-shadow: 0 0 40px -10px rgba(79,70,229,0.2);
+}
+
+.content { position: relative; z-index: 1; width: 100%; max-width: 1200px; }
+
+/* ── Lists ── */
+ul.features { list-style: none; }
+ul.features li {
+  position: relative;
+  padding-left: 28px;
+  margin-bottom: 14px;
+  font-size: 1.2rem;
+}
+ul.features li::before {
+  content: '▸';
+  position: absolute; left: 0;
+  color: var(--accent);
+  font-weight: 700;
+}
+
+/* ── Layouts ── */
+.cols { display: grid; gap: 24px; }
+.cols-2 { grid-template-columns: 1fr 1fr; }
+.cols-3 { grid-template-columns: 1fr 1fr 1fr; }
+.cols-4 { grid-template-columns: 1fr 1fr 1fr 1fr; }
+
+.text-center { text-align: center; }
+.mb-8 { margin-bottom: 8px; }
+.mb-16 { margin-bottom: 16px; }
+.mb-24 { margin-bottom: 24px; }
+.mb-32 { margin-bottom: 32px; }
+.mb-48 { margin-bottom: 48px; }
+.gap-16 { gap: 16px; }
+.gap-24 { gap: 24px; }
+
+/* ── Flow Diagram ── */
+.flow {
+  display: flex; align-items: center; gap: 12px;
+  flex-wrap: wrap; justify-content: center;
+}
+.flow-step {
+  background: var(--card);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 12px;
+  padding: 14px 20px;
+  font-size: 1rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.flow-arrow { color: var(--accent); font-size: 1.4rem; font-weight: 700; }
+
+/* ── Pillar Cards ── */
+.pillar-card {
+  padding: 32px;
+  border-radius: 20px;
+  background: var(--surface);
+  border: 1px solid rgba(255,255,255,0.05);
+  transition: transform 0.3s, box-shadow 0.3s;
+}
+.pillar-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 20px 40px -20px rgba(0,0,0,0.5);
+}
+.pillar-icon {
+  width: 56px; height: 56px;
+  border-radius: 14px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.6rem;
+  margin-bottom: 20px;
+}
+
+/* ── Stat Grid ── */
+.stat { text-align: center; }
+.stat-number {
+  font-size: 3rem;
+  font-weight: 700;
+  line-height: 1;
+  margin-bottom: 8px;
+}
+.stat-label {
+  font-size: 0.95rem;
+  color: var(--dim);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+/* ── Quote ── */
+.quote {
+  font-size: 1.6rem;
+  font-style: italic;
+  line-height: 1.6;
+  color: var(--text);
+  position: relative;
+  padding-left: 32px;
+  border-left: 3px solid var(--accent);
+  max-width: 800px;
+}
+
+/* ── Code Block ── */
+.code-block {
+  background: #0d0d14;
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 12px;
+  padding: 24px 28px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.9rem;
+  line-height: 1.7;
+  color: #a5b4fc;
+  white-space: pre;
+  overflow-x: auto;
+}
+.code-block .comment { color: #475569; }
+.code-block .key { color: #f472b6; }
+.code-block .string { color: #34d399; }
+.code-block .number { color: #fbbf24; }
+
+/* ── Timeline ── */
+.timeline { position: relative; padding-left: 40px; }
+.timeline::before {
+  content: '';
+  position: absolute; left: 14px; top: 8px; bottom: 8px;
+  width: 2px;
+  background: linear-gradient(to bottom, var(--accent), var(--accent2), var(--neon-pink));
+}
+.timeline-item {
+  position: relative;
+  margin-bottom: 28px;
+}
+.timeline-item::before {
+  content: '';
+  position: absolute;
+  left: -32px; top: 8px;
+  width: 12px; height: 12px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--bg);
+  box-shadow: 0 0 12px rgba(79,70,229,0.5);
+}
+.timeline-label { font-size: 0.85rem; color: var(--accent); font-weight: 600; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.05em; }
+.timeline-text { font-size: 1.1rem; color: var(--text); }
+.timeline-sub { font-size: 0.95rem; color: var(--muted); margin-top: 2px; }
+
+/* ── Navigation ── */
+.nav {
+  position: fixed; bottom: 28px; right: 40px;
+  display: flex; gap: 10px; z-index: 100;
+}
+.nav button {
+  width: 44px; height: 44px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(18,18,26,0.9);
+  color: var(--text);
+  font-size: 1.1rem;
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+  transition: background 0.2s, border-color 0.2s;
+}
+.nav button:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.slide-counter {
+  position: fixed; bottom: 32px; left: 40px;
+  font-size: 0.85rem; color: var(--dim);
+  font-family: 'JetBrains Mono', monospace;
+  z-index: 100;
+}
+
+/* ── Progress Bar ── */
+.progress-bar {
+  position: fixed; top: 0; left: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--gemini-blue), var(--gemini-red), var(--gemini-yellow), var(--gemini-green));
+  transition: width 0.4s ease;
+  z-index: 100;
+}
+
+/* ── Animations ── */
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 20px rgba(79,70,229,0.2); }
+  50% { box-shadow: 0 0 40px rgba(79,70,229,0.4); }
+}
+.float { animation: float 4s ease-in-out infinite; }
+.pulse-glow { animation: pulse-glow 3s ease-in-out infinite; }
+
+/* ── Voxel Decoration ── */
+.voxel-deco {
+  position: absolute;
+  width: 30px; height: 30px;
+  border-radius: 4px;
+  opacity: 0.15;
+  transform: rotate(45deg);
+}
+
+/* ── Table ── */
+.clean-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 1.05rem;
+}
+.clean-table th {
+  text-align: left;
+  padding: 14px 20px;
+  font-weight: 600;
+  color: var(--text);
+  border-bottom: 2px solid rgba(79,70,229,0.3);
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.clean-table td {
+  padding: 14px 20px;
+  color: var(--muted);
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+.clean-table tr:last-child td { border-bottom: none; }
+.clean-table tr:hover td { color: var(--text); background: rgba(79,70,229,0.04); }
+
+/* ── Responsive (just in case) ── */
+@media (max-width: 900px) {
+  .slide { padding: 32px 28px; }
+  h1 { font-size: 2.2rem; }
+  h2 { font-size: 1.6rem; }
+  .cols-2, .cols-3, .cols-4 { grid-template-columns: 1fr; }
+}
+
+/* ── Specific Slide Styles ── */
+.hero-glow {
+  position: absolute;
+  width: 500px; height: 500px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(79,70,229,0.15) 0%, transparent 70%);
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+</style>
+</head>
+<body>
+
+<div class="progress-bar" id="progress"></div>
+
+<div class="deck" id="deck">
+
+<!-- ═══════════════════════════════════════════════════ SLIDE 1: TITLE ═══ -->
+<div class="slide active" data-slide="0">
+  <div class="hero-glow"></div>
+  <div class="grid-bg"></div>
+  <div class="content text-center">
+    <div class="mb-24">
+      <span class="badge badge-gemini">Gemini Hackathon 2026</span>
+    </div>
+    <h1 class="mb-16" style="font-size: 4rem;">
+      <span class="gradient-text">Voxel Arena</span>
+    </h1>
+    <h3 class="mb-48" style="font-size: 1.8rem; color: var(--muted); font-weight: 400;">
+      Where Gemini Doesn't Just Power the Game —<br><strong style="color: var(--text);">It <em>Is</em> the Enemy.</strong>
+    </h3>
+    <div class="flow mb-48">
+      <div class="flow-step">🎮 Voxel Combat</div>
+      <div class="flow-arrow">+</div>
+      <div class="flow-step">🤖 Gemini AI Weapons</div>
+      <div class="flow-arrow">+</div>
+      <div class="flow-step">🧠 Living AI Antagonist</div>
+      <div class="flow-arrow">+</div>
+      <div class="flow-step">📖 AI-Generated War Stories</div>
+    </div>
+    <p style="color: var(--dim); font-size: 1rem;">Press <span class="mono" style="color:var(--accent)">→</span> or <span class="mono" style="color:var(--accent)">Space</span> to navigate</p>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════ SLIDE 2: PROBLEM ═══ -->
+<div class="slide" data-slide="1">
+  <div class="grid-bg"></div>
+  <div class="content">
+    <span class="badge badge-accent mb-24">The Problem</span>
+    <h2 class="mb-32">Most games use AI as a <span class="gradient-text">tool</span>.<br>We made it a <span class="gradient-text">character</span>.</h2>
+    <div class="cols cols-2 gap-24">
+      <div class="card">
+        <h3 style="color: var(--neon-pink); margin-bottom: 16px;">❌ What Others Do</h3>
+        <ul class="features">
+          <li>Generate static assets with AI</li>
+          <li>Chatbot NPCs with simple Q&A</li>
+          <li>Difficulty sliders based on stats</li>
+          <li>AI as a one-shot content generator</li>
+        </ul>
+      </div>
+      <div class="card card-glow">
+        <h3 style="color: var(--neon-cyan); margin-bottom: 16px;">✓ What We Do</h3>
+        <ul class="features">
+          <li>Gemini generates weapons from natural language <em>at runtime</em></li>
+          <li>AI antagonist that watches, adapts, and taunts you</li>
+          <li>Enemies with names, grudges, and memories</li>
+          <li>Every run produces a unique AI-written war story</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════ SLIDE 3: WHAT IS IT ═══ -->
+<div class="slide" data-slide="2">
+  <div class="grid-bg"></div>
+  <div class="content text-center">
+    <span class="badge badge-cyan mb-24">What We Built</span>
+    <h2 class="mb-16">A browser-based voxel arena fighter</h2>
+    <h3 class="mb-48" style="font-size: 1.3rem;">where you forge weapons by <em>describing them</em> and an AI god wages war against you</h3>
+    <div class="cols cols-4 gap-24">
+      <div class="card text-center">
+        <div style="font-size: 2.5rem; margin-bottom: 12px;">⚔️</div>
+        <strong style="color: var(--text); display: block; margin-bottom: 6px;">AI Weapon Forge</strong>
+        <p style="font-size: 1rem;">"Black hole cannon" → working weapon in 3 seconds</p>
+      </div>
+      <div class="card text-center">
+        <div style="font-size: 2.5rem; margin-bottom: 12px;">👁️</div>
+        <strong style="color: var(--text); display: block; margin-bottom: 6px;">Arena God</strong>
+        <p style="font-size: 1rem;">Gemini watches every move and fights back</p>
+      </div>
+      <div class="card text-center">
+        <div style="font-size: 2.5rem; margin-bottom: 12px;">💀</div>
+        <strong style="color: var(--text); display: block; margin-bottom: 6px;">Named Enemies</strong>
+        <p style="font-size: 1rem;">NPCs with identities, grudges, and last words</p>
+      </div>
+      <div class="card text-center">
+        <div style="font-size: 2.5rem; margin-bottom: 12px;">📜</div>
+        <strong style="color: var(--text); display: block; margin-bottom: 6px;">War Chronicle</strong>
+        <p style="font-size: 1rem;">AI writes an epic retelling of your battle</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════ SLIDE 4: HOW WEAPONS WORK ═══ -->
+<div class="slide" data-slide="3">
+  <div class="grid-bg"></div>
+  <div class="content">
+    <span class="badge badge-accent mb-24">Core Innovation</span>
+    <h2 class="mb-32">AI Weapon Forge — <span class="gradient-text">Creativity as Gameplay</span></h2>
+    <div class="cols cols-2 gap-24">
+      <div>
+        <div class="flow mb-32" style="flex-direction: column; align-items: flex-start;">
+          <div class="flow-step" style="width:100%;">1. Player types: <span class="mono" style="color:var(--neon-cyan)">"lightning cannon that chains between enemies"</span></div>
+          <div class="flow-arrow" style="align-self:center;">↓</div>
+          <div class="flow-step" style="width:100%;">2. Gemini generates executable JavaScript weapon code</div>
+          <div class="flow-arrow" style="align-self:center;">↓</div>
+          <div class="flow-step" style="width:100%;">3. Code validated & sandboxed via Weapon SDK</div>
+          <div class="flow-arrow" style="align-self:center;">↓</div>
+          <div class="flow-step" style="width:100%;">4. Weapon compiled with <span class="mono">new Function()</span> and equipped instantly</div>
+        </div>
+      </div>
+      <div>
+        <p class="mb-16" style="color: var(--text); font-weight: 500;">Example Prompts That Work:</p>
+        <div class="card mb-16" style="padding: 16px 20px;">
+          <span class="mono" style="color: var(--neon-cyan); font-size: 1rem;">"a black hole cannon that pulls enemies inward"</span>
+        </div>
+        <div class="card mb-16" style="padding: 16px 20px;">
+          <span class="mono" style="color: var(--neon-pink); font-size: 1rem;">"freeze beam that stops on first hit"</span>
+        </div>
+        <div class="card mb-16" style="padding: 16px 20px;">
+          <span class="mono" style="color: var(--neon-orange); font-size: 1rem;">"rapid plasma rifle with small blue bolts"</span>
+        </div>
+        <div class="card" style="padding: 16px 20px;">
+          <span class="mono" style="color: var(--gemini-green); font-size: 1rem;">"homing missiles" or even just "pizza"</span>
+        </div>
+        <p style="margin-top: 16px; font-size: 1rem;">24-helper SDK: targeting, damage, status effects, particles, trails, force</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════ SLIDE 5: THREE PILLARS ═══ -->
+<div class="slide" data-slide="4">
+  <div class="grid-bg"></div>
+  <div class="content text-center">
+    <span class="badge badge-gemini mb-24">Gemini-Powered Living World</span>
+    <h2 class="mb-48">Three Pillars of <span class="gemini-gradient">AI Intelligence</span></h2>
+    <div class="cols cols-3 gap-24">
+      <div class="pillar-card">
+        <div class="pillar-icon" style="background: linear-gradient(135deg, rgba(79,70,229,0.2), rgba(124,58,237,0.2));">👁️</div>
+        <h3 style="color: var(--text); font-size: 1.4rem; margin-bottom: 12px;">The Arena God</h3>
+        <p style="font-size: 1.05rem;">A persistent GLaDOS-like AI antagonist. Observes your tactics, delivers sardonic commentary, and <strong style="color:var(--neon-cyan);">mutates the arena</strong> to counter your strategies.</p>
+        <div style="margin-top: 16px; padding: 12px; background: rgba(0,0,0,0.3); border-radius: 10px; font-style: italic; color: var(--neon-cyan); font-size: 0.95rem;">
+          "You rely on that wall too much."<br>*wall sinks into the ground*
+        </div>
+      </div>
+      <div class="pillar-card">
+        <div class="pillar-icon" style="background: linear-gradient(135deg, rgba(244,114,182,0.2), rgba(251,146,60,0.2));">💀</div>
+        <h3 style="color: var(--text); font-size: 1.4rem; margin-bottom: 12px;">Named Enemies</h3>
+        <p style="font-size: 1.05rem;">Enemies with AI-generated identities. They remember fallen comrades, develop <strong style="color:var(--neon-pink);">grudges</strong>, and evolve <strong style="color:var(--neon-pink);">resistances</strong> to your weapons.</p>
+        <div style="margin-top: 16px; padding: 12px; background: rgba(0,0,0,0.3); border-radius: 10px; font-size: 0.95rem;">
+          <span style="color: var(--neon-pink);">Mako, Kira's Avenger</span><br>
+          <span style="color: var(--muted); font-style: italic;">"Ice killed Kira. Not me." [freeze resistant]</span>
+        </div>
+      </div>
+      <div class="pillar-card">
+        <div class="pillar-icon" style="background: linear-gradient(135deg, rgba(251,191,36,0.2), rgba(52,168,83,0.2));">📜</div>
+        <h3 style="color: var(--text); font-size: 1.4rem; margin-bottom: 12px;">War Chronicle</h3>
+        <p style="font-size: 1.05rem;">On game over, Gemini writes a dramatic <strong style="color:var(--gemini-yellow);">300-word epic</strong> retelling your battle — naming enemies, weapons, and pivotal moments.</p>
+        <div style="margin-top: 16px; padding: 12px; background: rgba(0,0,0,0.3); border-radius: 10px; font-style: italic; color: var(--gemini-yellow); font-size: 0.95rem;">
+          "Wave 7 broke against the warrior like water on stone..."
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════ SLIDE 6: ARCHITECTURE ═══ -->
+<div class="slide" data-slide="5">
+  <div class="grid-bg"></div>
+  <div class="content">
+    <span class="badge badge-accent mb-24">Architecture</span>
+    <h2 class="mb-32">How It All <span class="gradient-text">Connects</span></h2>
+    <div class="cols cols-2 gap-24">
+      <div class="code-block" style="font-size: 0.82rem; line-height: 1.65;">
+<span class="comment">// Match Memory — the spine of the system</span>
+<span class="comment">// Grows every wave, feeds ALL Gemini calls</span>
+
+     ┌─────────────────────┐
+     │   <span class="key">MATCH MEMORY</span>       │
+     │   grows every wave   │
+     │   persists across    │
+     │   sessions           │
+     └─────────┬───────────┘
+               │
+    ┌──────────┼──────────┐
+    │          │          │
+    ▼          ▼          ▼
+┌────────┐ ┌────────┐ ┌────────┐
+│<span class="string">ARENA</span>   │ │<span class="string">NAMED</span>  │ │<span class="string">WAR</span>    │
+│<span class="string">GOD</span>     │ │<span class="string">ENEMIES</span>│ │<span class="string">CHRNCL</span> │
+│        │ │        │ │        │
+│speaks, │ │grudges,│ │epic    │
+│mutates │ │resist, │ │retell  │
+│arena   │ │taunts  │ │of run  │
+└────────┘ └────────┘ └────────┘</div>
+      <div>
+        <p class="mb-24" style="color: var(--text); font-weight: 500; font-size: 1.15rem;">Single growing context window per session:</p>
+        <div class="card mb-16">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <span>Wave 1</span>
+            <span class="mono" style="color:var(--gemini-green);">~200 tokens</span>
+          </div>
+          <div style="height:4px; background:var(--surface); border-radius:2px; margin-top:8px;">
+            <div style="height:4px; width:5%; background:var(--gemini-green); border-radius:2px;"></div>
+          </div>
+        </div>
+        <div class="card mb-16">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <span>Wave 5</span>
+            <span class="mono" style="color:var(--gemini-blue);">~1,500 tokens</span>
+          </div>
+          <div style="height:4px; background:var(--surface); border-radius:2px; margin-top:8px;">
+            <div style="height:4px; width:25%; background:var(--gemini-blue); border-radius:2px;"></div>
+          </div>
+        </div>
+        <div class="card mb-16">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <span>Wave 10</span>
+            <span class="mono" style="color:var(--gemini-yellow);">~3,500 tokens</span>
+          </div>
+          <div style="height:4px; background:var(--surface); border-radius:2px; margin-top:8px;">
+            <div style="height:4px; width:55%; background:var(--gemini-yellow); border-radius:2px;"></div>
+          </div>
+        </div>
+        <div class="card">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <span>Wave 15+</span>
+            <span class="mono" style="color:var(--gemini-red);">~6,000+ tokens</span>
+          </div>
+          <div style="height:4px; background:var(--surface); border-radius:2px; margin-top:8px;">
+            <div style="height:4px; width:90%; background:linear-gradient(90deg, var(--gemini-blue), var(--gemini-red)); border-radius:2px;"></div>
+          </div>
+        </div>
+        <p style="margin-top:20px; font-size: 1rem; color: var(--dim);">Visible, growing use of Gemini's long-context window — judges see it scaling naturally with gameplay.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════ SLIDE 7: LLAMAINDEX ═══ -->
+<div class="slide" data-slide="6">
+  <div class="grid-bg"></div>
+  <div class="content text-center">
+    <span class="badge badge-pink mb-24">LlamaIndex Multi-Agent System</span>
+    <h2 class="mb-16">Generative AI <span class="gradient-text">Everywhere</span></h2>
+    <h3 class="mb-32" style="font-size: 1.15rem;">6 specialized agents orchestrated by LlamaIndex AgentWorkflow + Gemini</h3>
+    <div class="cols cols-3 gap-24">
+      <div class="card">
+        <div style="font-size: 1.8rem; margin-bottom: 10px;">🧍</div>
+        <strong style="color: var(--neon-cyan); display:block; margin-bottom: 6px;">Avatar Agent</strong>
+        <p style="font-size: 0.95rem;">"Cyber-ninja" → unique voxel avatar with AI-chosen colors, proportions, glow</p>
+      </div>
+      <div class="card">
+        <div style="font-size: 1.8rem; margin-bottom: 10px;">💔</div>
+        <strong style="color: var(--neon-pink); display:block; margin-bottom: 6px;">Damage Mutation</strong>
+        <p style="font-size: 0.95rem;">Avatar visually degrades based on character concept. Lava golem cracks; cyber-ninja glitches.</p>
+      </div>
+      <div class="card">
+        <div style="font-size: 1.8rem; margin-bottom: 10px;">🏟️</div>
+        <strong style="color: var(--neon-orange); display:block; margin-bottom: 6px;">Arena Generator</strong>
+        <p style="font-size: 0.95rem;">Unique arena layouts each run — "Volcanic Crucible", "Frozen Cathedral", "Neon Undercity"</p>
+      </div>
+      <div class="card">
+        <div style="font-size: 1.8rem; margin-bottom: 10px;">👾</div>
+        <strong style="color: var(--gemini-red); display:block; margin-bottom: 6px;">Enemy Designer</strong>
+        <p style="font-size: 0.95rem;">AI generates unique enemy variants per wave — visuals, behavior quirks, entrance lines</p>
+      </div>
+      <div class="card">
+        <div style="font-size: 1.8rem; margin-bottom: 10px;">🎙️</div>
+        <strong style="color: var(--gemini-yellow); display:block; margin-bottom: 6px;">Battle Narrator</strong>
+        <p style="font-size: 0.95rem;">Epic real-time commentary: "Three fell in a single breath. The arena remembers."</p>
+      </div>
+      <div class="card">
+        <div style="font-size: 1.8rem; margin-bottom: 10px;">✨</div>
+        <strong style="color: var(--gemini-green); display:block; margin-bottom: 6px;">Weapon Visuals</strong>
+        <p style="font-size: 0.95rem;">AI-generated projectile colors, trails, impact effects matched to weapon concept</p>
+      </div>
+    </div>
+    <p style="margin-top: 24px; color: var(--dim); font-size: 1rem;">All agents return JSON configs → Three.js renders instantly. No image generation. No loading screens.</p>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════ SLIDE 8: DEMO FLOW ═══ -->
+<div class="slide" data-slide="7">
+  <div class="grid-bg"></div>
+  <div class="content">
+    <span class="badge badge-cyan mb-24">Live Demo Flow</span>
+    <h2 class="mb-32">3-Minute <span class="gradient-text">Demo Script</span></h2>
+    <div class="timeline">
+      <div class="timeline-item">
+        <div class="timeline-label">0:00 — Game Start</div>
+        <div class="timeline-text">Arena God speaks: <em>"Another one. Let's begin."</em></div>
+      </div>
+      <div class="timeline-item">
+        <div class="timeline-label">0:20 — Wave 1</div>
+        <div class="timeline-text">Kill grunts. <span style="color:var(--neon-pink);">Kira the Bold</span> dies. Last words: <em>"I didn't expect..."</em></div>
+      </div>
+      <div class="timeline-item">
+        <div class="timeline-label">0:40 — Forge Weapon</div>
+        <div class="timeline-text">Type <span class="mono" style="color:var(--neon-cyan);">"Frost Nova"</span> → Arena God: <em>"Interesting choice. Cold and efficient."</em></div>
+      </div>
+      <div class="timeline-item">
+        <div class="timeline-label">1:10 — Wave 2</div>
+        <div class="timeline-text"><span style="color:var(--neon-pink);">Mako, Kira's Avenger</span> spawns — freeze resistant. <em>"Ice killed Kira. Not me."</em></div>
+      </div>
+      <div class="timeline-item">
+        <div class="timeline-label">1:40 — Wave 3</div>
+        <div class="timeline-text">Arena God: <em>"You keep hiding behind that wall. Boring."</em> → Cover block <strong>sinks</strong>.</div>
+      </div>
+      <div class="timeline-item">
+        <div class="timeline-label">2:10 — Near Death</div>
+        <div class="timeline-text">HP drops to 10%. Arena God: <em>"So close... but not yet."</em> Avatar enters rage form.</div>
+      </div>
+      <div class="timeline-item">
+        <div class="timeline-label">2:30 — Game Over</div>
+        <div class="timeline-text">Arena God: <em>"Finally. You lasted longer than most."</em></div>
+      </div>
+      <div class="timeline-item">
+        <div class="timeline-label">2:40 — War Chronicle</div>
+        <div class="timeline-text">AI-written epic scrolls on screen with typewriter effect. Names Kira, Mako, the Frost Nova. Shareable.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════ SLIDE 9: TECH STACK ═══ -->
+<div class="slide" data-slide="8">
+  <div class="grid-bg"></div>
+  <div class="content">
+    <span class="badge badge-accent mb-24">Tech Stack</span>
+    <h2 class="mb-32">Built With</h2>
+    <div class="cols cols-2 gap-24">
+      <div>
+        <table class="clean-table">
+          <tr><th>Layer</th><th>Technology</th></tr>
+          <tr><td>3D Engine</td><td style="color:var(--text);">Three.js r128</td></tr>
+          <tr><td>Build Tool</td><td style="color:var(--text);">Vite</td></tr>
+          <tr><td>Language</td><td style="color:var(--text);">Plain JavaScript ES Modules</td></tr>
+          <tr><td>AI Backend</td><td style="color:var(--text);">Gemini API (OpenAI-compatible endpoint)</td></tr>
+          <tr><td>Agent Framework</td><td style="color:var(--text);">LlamaIndex AgentWorkflow</td></tr>
+          <tr><td>Audio</td><td style="color:var(--text);">Procedural Web Audio API</td></tr>
+          <tr><td>Storage</td><td style="color:var(--text);">localStorage (weapons, sessions)</td></tr>
+        </table>
+      </div>
+      <div>
+        <div class="card mb-16">
+          <strong style="color:var(--text); display:block; margin-bottom: 8px;">Gemini API Usage Strategy</strong>
+          <ul class="features" style="font-size: 1rem;">
+            <li>1 batched call per wave (God + enemies)</li>
+            <li>Fire-and-forget for mid-combat quips</li>
+            <li>Streaming for War Chronicle (typewriter)</li>
+            <li>All calls during natural pauses — never blocks gameplay</li>
+          </ul>
+        </div>
+        <div class="card">
+          <strong style="color:var(--text); display:block; margin-bottom: 8px;">Safety</strong>
+          <ul class="features" style="font-size: 1rem;">
+            <li>Weapon code validated before execution</li>
+            <li>Sandboxed via SDK context object</li>
+            <li>Dangerous patterns detected and blocked</li>
+            <li>Fallback weapon on generation failure</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════ SLIDE 10: STATS ═══ -->
+<div class="slide" data-slide="9">
+  <div class="grid-bg"></div>
+  <div class="content text-center">
+    <span class="badge badge-gemini mb-24">By The Numbers</span>
+    <h2 class="mb-48">Project <span class="gemini-gradient">Scale</span></h2>
+    <div class="cols cols-4 gap-24 mb-48">
+      <div class="stat">
+        <div class="stat-number gradient-text">24</div>
+        <div class="stat-label">Weapon SDK Helpers</div>
+      </div>
+      <div class="stat">
+        <div class="stat-number" style="color: var(--neon-cyan);">6</div>
+        <div class="stat-label">LlamaIndex Agents</div>
+      </div>
+      <div class="stat">
+        <div class="stat-number" style="color: var(--neon-pink);">4</div>
+        <div class="stat-label">Enemy Types</div>
+      </div>
+      <div class="stat">
+        <div class="stat-number" style="color: var(--gemini-yellow);">∞</div>
+        <div class="stat-label">Unique Weapons</div>
+      </div>
+    </div>
+    <div class="cols cols-4 gap-24">
+      <div class="stat">
+        <div class="stat-number" style="color: var(--gemini-green);">30+</div>
+        <div class="stat-label">Source Files</div>
+      </div>
+      <div class="stat">
+        <div class="stat-number" style="color: var(--neon-orange);">0</div>
+        <div class="stat-label">External Assets</div>
+      </div>
+      <div class="stat">
+        <div class="stat-number gradient-text">100%</div>
+        <div class="stat-label">Procedural</div>
+      </div>
+      <div class="stat">
+        <div class="stat-number" style="color: var(--gemini-blue);">3s</div>
+        <div class="stat-label">Weapon Forge Time</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════ SLIDE 11: JUDGING CRITERIA ═══ -->
+<div class="slide" data-slide="10">
+  <div class="grid-bg"></div>
+  <div class="content">
+    <span class="badge badge-accent mb-24">Hackathon Criteria</span>
+    <h2 class="mb-32">How We Hit Every <span class="gradient-text">Judging Criterion</span></h2>
+    <div class="cols cols-2 gap-24">
+      <div class="card mb-16">
+        <strong style="color: var(--gemini-blue); display:block; margin-bottom: 8px;">🧠 Long-Context Window</strong>
+        <p style="font-size: 1.05rem;">Match memory grows every wave — by wave 10+, Gemini processes thousands of tokens of battle history to generate contextually rich responses.</p>
+      </div>
+      <div class="card mb-16">
+        <strong style="color: var(--gemini-red); display:block; margin-bottom: 8px;">🤖 Genuine AI Agency</strong>
+        <p style="font-size: 1.05rem;">Arena God makes real strategic decisions: removing cover, adding hazards, spawning champions. Not scripted — truly generated.</p>
+      </div>
+      <div class="card mb-16">
+        <strong style="color: var(--gemini-yellow); display:block; margin-bottom: 8px;">🔄 Evolving Behavior</strong>
+        <p style="font-size: 1.05rem;">Enemies develop resistances to your weapons. Wave 2's freeze-immune avenger directly counters Wave 1's Frost Nova.</p>
+      </div>
+      <div class="card mb-16">
+        <strong style="color: var(--gemini-green); display:block; margin-bottom: 8px;">💾 Persistent Memory</strong>
+        <p style="font-size: 1.05rem;">Cross-session persistence via localStorage. Return players get: "The horde remembers Captain Vex. They've sent his daughter."</p>
+      </div>
+      <div class="card mb-16">
+        <strong style="color: var(--neon-cyan); display:block; margin-bottom: 8px;">🎨 Creative AI Use</strong>
+        <p style="font-size: 1.05rem;">AI generates working code (weapons), narrative (chronicle), strategy (arena mutations), and identity (enemy names) — not just one trick.</p>
+      </div>
+      <div class="card">
+        <strong style="color: var(--neon-pink); display:block; margin-bottom: 8px;">✨ Wow Factor</strong>
+        <p style="font-size: 1.05rem;">Type "pizza launcher" → it works. Arena God taunts you. Enemies remember. Your story is unique. Every. Single. Run.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════ SLIDE 12: Q&A ═══ -->
+<div class="slide" data-slide="11">
+  <div class="grid-bg"></div>
+  <div class="content">
+    <span class="badge badge-cyan mb-24">Anticipated Questions</span>
+    <h2 class="mb-32">Q&A</h2>
+    <div class="cols cols-2 gap-24">
+      <div class="card mb-16">
+        <strong style="color: var(--text); display:block; margin-bottom: 6px;">How do you prevent dangerous generated code?</strong>
+        <p style="font-size: 1rem;">Weapon code runs in a sandboxed context object. A validator scans for dangerous patterns (eval, fetch, DOM access). Code only gets the Weapon SDK helpers — nothing else.</p>
+      </div>
+      <div class="card mb-16">
+        <strong style="color: var(--text); display:block; margin-bottom: 6px;">What if Gemini returns bad/broken code?</strong>
+        <p style="font-size: 1rem;">Multi-model fallback chain. Validation catches syntax errors. If all fails, a default fallback weapon equips. Player never gets stuck.</p>
+      </div>
+      <div class="card mb-16">
+        <strong style="color: var(--text); display:block; margin-bottom: 6px;">Doesn't API latency ruin gameplay?</strong>
+        <p style="font-size: 1rem;">All Gemini calls happen during natural pauses: wave rest periods, game over screen, forge UI. Never blocks real-time combat. Mid-combat quips are fire-and-forget.</p>
+      </div>
+      <div class="card mb-16">
+        <strong style="color: var(--text); display:block; margin-bottom: 6px;">Can players generate overpowered weapons?</strong>
+        <p style="font-size: 1rem;">The system prompt constrains weapon power budgets. The SDK normalizes damage values. The Arena God can counter with resistant enemies and arena changes.</p>
+      </div>
+      <div class="card mb-16">
+        <strong style="color: var(--text); display:block; margin-bottom: 6px;">How is this different from asset generation?</strong>
+        <p style="font-size: 1rem;">We don't generate images or static content. Gemini generates <em>executable behavior</em>, <em>strategic decisions</em>, and <em>narrative</em>. The AI is a living participant, not a content pipeline.</p>
+      </div>
+      <div class="card">
+        <strong style="color: var(--text); display:block; margin-bottom: 6px;">What's the API cost per session?</strong>
+        <p style="font-size: 1rem;">~1 batched call per wave + 1 weapon forge + 1 chronicle = roughly 10-15 API calls for a full 10-wave run. Efficient batching keeps it minimal.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════ SLIDE 13: CLOSING ═══ -->
+<div class="slide" data-slide="12">
+  <div class="hero-glow"></div>
+  <div class="grid-bg"></div>
+  <div class="content text-center">
+    <div class="mb-32">
+      <span class="badge badge-gemini" style="font-size: 1rem; padding: 8px 24px;">The Takeaway</span>
+    </div>
+    <div class="quote mb-48" style="text-align: center; border: none; padding: 0; max-width: 900px; margin: 0 auto 48px; font-size: 1.8rem;">
+      "In most games, AI controls difficulty sliders.<br>
+      In <span class="gradient-text">Voxel Arena</span>, Gemini <strong>IS</strong> the enemy.<br>
+      <span style="color: var(--muted); font-size: 1.4rem;">It watches you play, names its soldiers, remembers who you killed,<br>adapts its strategy, taunts you mid-battle —<br>and when you finally fall, it writes the story of your war.</span>"
+    </div>
+    <h1 style="font-size: 3.5rem;" class="mb-24">
+      <span class="gemini-gradient">The AI isn't a tool.</span>
+    </h1>
+    <h2 style="font-size: 2.5rem; color: var(--text); font-weight: 700;" class="mb-48">
+      It's the antagonist.
+    </h2>
+    <div class="flow">
+      <div class="flow-step" style="background: rgba(79,70,229,0.15); border-color: rgba(79,70,229,0.3);">
+        🎮 Play it now
+      </div>
+      <div class="flow-step" style="background: rgba(34,211,238,0.1); border-color: rgba(34,211,238,0.25);">
+        ⚔️ Forge your weapon
+      </div>
+      <div class="flow-step" style="background: rgba(244,114,182,0.1); border-color: rgba(244,114,182,0.25);">
+        📜 Write your story
+      </div>
+    </div>
+    <p style="margin-top: 40px; color: var(--dim); font-size: 1.1rem;">Thank you! Questions?</p>
+  </div>
+</div>
+
+</div><!-- /deck -->
+
+<!-- Navigation -->
+<div class="slide-counter" id="counter">01 / 13</div>
+<div class="nav">
+  <button onclick="prev()" title="Previous">←</button>
+  <button onclick="next()" title="Next">→</button>
+</div>
+
+<script>
+let current = 0;
+const slides = document.querySelectorAll('.slide');
+const total = slides.length;
+const progress = document.getElementById('progress');
+const counter = document.getElementById('counter');
+
+function go(n) {
+  if (n < 0 || n >= total) return;
+  slides[current].classList.remove('active');
+  current = n;
+  slides[current].classList.add('active');
+  progress.style.width = ((current / (total - 1)) * 100) + '%';
+  counter.textContent = String(current + 1).padStart(2, '0') + ' / ' + String(total).padStart(2, '0');
+}
+function next() { go(current + 1); }
+function prev() { go(current - 1); }
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'Enter') { e.preventDefault(); next(); }
+  if (e.key === 'ArrowLeft' || e.key === 'Backspace') { e.preventDefault(); prev(); }
+  if (e.key === 'Home') { e.preventDefault(); go(0); }
+  if (e.key === 'End') { e.preventDefault(); go(total - 1); }
+});
+
+// Touch support
+let touchStartX = 0;
+document.addEventListener('touchstart', e => { touchStartX = e.touches[0].clientX; });
+document.addEventListener('touchend', e => {
+  const diff = e.changedTouches[0].clientX - touchStartX;
+  if (Math.abs(diff) > 60) { diff < 0 ? next() : prev(); }
+});
+</script>
+
+</body>
+</html>

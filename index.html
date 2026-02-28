@@ -8,6 +8,27 @@
 </head>
 <body>
 
+<!-- Avatar Selection Screen -->
+<div id="avatar-overlay" class="open">
+  <div id="avatar-box">
+    <h2>Describe Your Fighter</h2>
+    <p id="avatar-subtitle">AI will generate a unique voxel avatar for you</p>
+    <textarea id="avatar-input" placeholder="e.g. 'cyberpunk samurai', 'molten lava golem', 'ice witch with crystal armor'"></textarea>
+    <div id="avatar-presets">
+      <button class="avatar-preset" data-desc="neon cyber-ninja with electric blue visor">Cyber-Ninja</button>
+      <button class="avatar-preset" data-desc="molten lava golem with cracked armor">Lava Golem</button>
+      <button class="avatar-preset" data-desc="frost witch with ice crystal crown">Frost Witch</button>
+      <button class="avatar-preset" data-desc="void shadow assassin, dark purple with glowing eyes">Shadow</button>
+    </div>
+    <button id="avatar-btn">Generate Fighter</button>
+    <button id="avatar-skip">Skip → Default Fighter</button>
+    <div id="avatar-status"></div>
+  </div>
+</div>
+
+<!-- Narrator Overlay -->
+<div id="narrator-overlay" class="narrator-overlay"></div>
+
 <div id="crosshair"></div>
 <div id="weapon-name"></div>
 <div id="player-level"></div>

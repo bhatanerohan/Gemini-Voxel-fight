@@ -4,6 +4,7 @@ import { geminiJSON } from './geminiService.js';
 import { showGodDialogue, flashGodQuip, hideGodDialogue } from './arenaGodUI.js';
 import { GameState } from './gameState.js';
 import { buildSessionContext } from './sessionMemory.js';
+import { getCurrentThemeName } from './themeManager.js';
 
 let godCallInProgress = false;
 let lastCallTime = 0;
@@ -48,7 +49,7 @@ For game_over, give a memorable final line. No mutation.`;
 function buildUserMessage(triggerType) {
   const sessionCtx = buildSessionContext();
   const matchCtx = MatchMemory.buildGeminiContext();
-  return `TRIGGER: ${triggerType}\nPLAYER HISTORY:\n${sessionCtx}\n\nCURRENT MATCH:\n${matchCtx}`;
+  return `TRIGGER: ${triggerType}\nCURRENT THEME: ${getCurrentThemeName()}\nPLAYER HISTORY:\n${sessionCtx}\n\nCURRENT MATCH:\n${matchCtx}`;
 }
 
 const QUIP_TRIGGERS = new Set(['near_death', 'multi_kill', 'first_forge']);

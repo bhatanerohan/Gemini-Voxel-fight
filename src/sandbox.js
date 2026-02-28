@@ -29,6 +29,10 @@ export let elapsed = 0;
 export let fireFn = null;
 export let lastFire = 0;
 
+let _activeWeaponVisuals = null;
+export function setActiveWeaponVisuals(config) { _activeWeaponVisuals = config; }
+export function getActiveWeaponVisuals() { return _activeWeaponVisuals; }
+
 const weaponSlots = [
   { fn: null, name: '' },
   { fn: null, name: '' },
@@ -787,6 +791,19 @@ export function buildCtx() {
         gravity = 1, radius = 0.5, bounce = 0.3, lifetime = null, onUpdate = null } = opt;
       const vel = velocity instanceof THREE.Vector3 ? velocity.clone() : new THREE.Vector3(velocity.x || 0, velocity.y || 0, velocity.z || 0);
       const pos = position instanceof THREE.Vector3 ? position.clone() : new THREE.Vector3(position.x || 0, position.y || 0, position.z || 0);
+
+      // Apply weapon visuals to spawned projectiles
+      if (_activeWeaponVisuals?.projectile && mesh.material) {
+        try {
+          const pv = _activeWeaponVisuals.projectile;
+          mesh.material.color?.set(pv.color);
+          if (mesh.material.emissive) {
+            mesh.material.emissive.set(pv.emissiveColor || pv.color);
+            mesh.material.emissiveIntensity = pv.glowIntensity || 1.5;
+          }
+        } catch (e) { /* ignore visual errors */ }
+      }
+
       mesh.position.copy(pos);
       _scene.add(mesh);
       const ent = {
@@ -896,7 +913,13 @@ export function buildCtx() {
 
     // ── GPU Particle Burst (single draw call) ──
     burstParticles: (opts = {}) => {
-      if (_particlePool) _particlePool.burst(opts);
+      if (_particlePool) {
+        // Apply weapon visuals color if no explicit color set
+        if (!opts.color && _activeWeaponVisuals?.impact) {
+          opts.color = _activeWeaponVisuals.impact.particleColor;
+        }
+        _particlePool.burst(opts);
+      }
     },
 
     // ── Explosion Helper (now uses particle pool) ──
