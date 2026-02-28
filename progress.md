@@ -170,3 +170,8 @@ Original prompt: i though we aren't using 2 stage weapon generator? / yes do it
   - This reduces generated-weapon crashes around `.stop()` on partially initialized timing helpers.
 
 - Switched forge model preference in `src/forge.js` to try `gemini-3-flash-preview` first, with existing fallbacks preserved.
+
+- Removed browser-side Gemini secret usage:
+  - `src/forge.js` no longer reads `VITE_GEMINI_API_KEY` or sends an auth header from the client.
+  - `vite.config.js` now reads `GEMINI_API_KEY` server-side via `loadEnv(...)` and injects the upstream `Authorization` header in the dev proxy.
+  - Updated `.env.example` and `README.md` to document the new `GEMINI_API_KEY` flow and clarify that production still needs a real backend/function.

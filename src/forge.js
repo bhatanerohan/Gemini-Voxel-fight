@@ -3,16 +3,12 @@ import { CODER_PROMPT } from './prompt.js';
 
 const GEMINI_CHAT_COMPLETIONS_PATH = '/gemini/chat/completions';
 const GEMINI_MODELS = ['gemini-3-flash-preview', 'gemini-3-pro-preview', 'gemini-2.5-flash'];
-const ENV_GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY?.trim() ?? '';
 
-let apiKey = ENV_GEMINI_API_KEY;
 let forgeOpen = false;
 let onOpenCb = null;
 let onCloseCb = null;
 
 export function isForgeOpen() { return forgeOpen; }
-
-export function setApiKey(key) { apiKey = key; }
 
 export function initForge(callbacks = {}) {
   onOpenCb = callbacks.onOpen;
@@ -106,7 +102,6 @@ async function requestCompletion(systemPrompt, userMessage, model) {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
       model,
@@ -135,8 +130,6 @@ async function requestCompletion(systemPrompt, userMessage, model) {
 }
 
 async function callLLM(systemPrompt, userMessage, models = GEMINI_MODELS) {
-  if (!apiKey) throw new Error('Missing Gemini API key. Set VITE_GEMINI_API_KEY in .env.');
-
   let lastError = null;
   for (const model of models) {
     try {

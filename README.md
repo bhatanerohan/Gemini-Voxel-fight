@@ -50,7 +50,7 @@ The repo already includes:
 Open `.env` and set:
 
 ```env
-VITE_GEMINI_API_KEY=YOUR_GEMINI_API_KEY
+GEMINI_API_KEY=YOUR_GEMINI_API_KEY
 ```
 
 If you prefer, you can copy `.env.example` into `.env` and fill it in.
@@ -123,15 +123,18 @@ Try prompts like these:
 
 ## Environment Notes
 
-The Gemini key is currently read from `VITE_GEMINI_API_KEY`.
+The frontend no longer reads the Gemini key directly.
+
+Local development now works like this:
+- the browser calls `/gemini/chat/completions`
+- the Vite dev proxy in [`vite.config.js`](./vite.config.js) reads `GEMINI_API_KEY` server-side
+- the proxy adds the upstream `Authorization` header before forwarding the request
 
 Important implication:
-- this is convenient for local development
-- but `VITE_` variables are exposed to the client bundle
+- `GEMINI_API_KEY` is not exposed to the client bundle
+- using `VITE_GEMINI_API_KEY` for secrets is incorrect and should be avoided
 
-So this setup is fine for local/dev use, but not ideal for a public production deployment with your own secret key.
-
-For production hosting, the better pattern is:
+For production hosting, use the same pattern:
 - keep the Gemini API key on the server
 - call Gemini through a backend endpoint or serverless function
 
@@ -140,7 +143,7 @@ For production hosting, the better pattern is:
 The project currently uses the Vite dev proxy in [`vite.config.js`](./vite.config.js) for `/gemini`.
 
 That means:
-- local development works
+- local development works when `GEMINI_API_KEY` is set in `.env`
 - a static production deploy will build successfully
 - but AI weapon generation will not work in production unless you add a real backend/function/proxy
 
@@ -153,10 +156,12 @@ If you deploy this to Vercel, Netlify, or similar, the frontend will load, but t
 Make sure `.env` contains:
 
 ```env
-VITE_GEMINI_API_KEY=YOUR_GEMINI_API_KEY
+GEMINI_API_KEY=YOUR_GEMINI_API_KEY
 ```
 
 Then restart `npm run dev`.
+
+The key must be available to the Vite dev server, not the browser bundle.
 
 ### Weapon generation works locally but not after deployment
 
