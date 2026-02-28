@@ -440,6 +440,13 @@ export function buildCtx() {
         mesh, pos, vel,
         angVel: angularVelocity ? { x: angularVelocity.x || 0, y: angularVelocity.y || 0, z: angularVelocity.z || 0 } : null,
         gravity, radius, bounce, lifetime, age: 0, onUpdate, alive: true,
+        get position() { return pos; },
+        set position(v) {
+          pos.set(v?.x || 0, v?.y || 0, v?.z || 0);
+          mesh.position.copy(pos);
+        },
+        get velocity() { return vel; },
+        set velocity(v) { vel.set(v?.x || 0, v?.y || 0, v?.z || 0); },
         destroy() { destroyEntity(ent); },
         getPosition() { return pos.clone(); },
         getVelocity() { return vel.clone(); },

@@ -2,7 +2,7 @@ import { setWeapon } from './sandbox.js';
 import { CODER_PROMPT } from './prompt.js';
 
 const GEMINI_CHAT_COMPLETIONS_PATH = '/gemini/chat/completions';
-const GEMINI_MODELS = ['gemini-3-pro-preview', 'gemini-3-flash-preview', 'gemini-2.5-flash'];
+const GEMINI_MODELS = ['gemini-3-flash-preview', 'gemini-3-pro-preview', 'gemini-2.5-flash'];
 const ENV_GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY?.trim() ?? '';
 
 let apiKey = ENV_GEMINI_API_KEY;

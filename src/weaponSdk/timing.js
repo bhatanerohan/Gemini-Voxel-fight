@@ -4,17 +4,26 @@ export function createTimingHelpers(runtime, deps) {
   const { damage, status, force, visuals, targeting } = deps;
 
   function channel(opts = {}) {
-    if (typeof runtime?.onUpdate !== 'function') {
-      throw new Error('weaponSdk.channel requires runtime.onUpdate');
-    }
-
     const duration = Math.max(0.001, opts.duration ?? 0.5);
     const tick = Math.max(0, opts.tick ?? 0);
     let age = 0;
     let tickAcc = 0;
     let stopped = false;
+    let cb = null;
 
-    const cb = runtime.onUpdate((dt, elapsed) => {
+    const handle = {
+      stop() {
+        stopped = true;
+        if (typeof runtime?.removeOnUpdate === 'function' && cb) runtime.removeOnUpdate(cb);
+      },
+    };
+
+    if (typeof runtime?.onUpdate !== 'function') {
+      console.warn('weaponSdk.channel requires runtime.onUpdate');
+      return handle;
+    }
+
+    cb = runtime.onUpdate((dt, elapsed) => {
       if (stopped) return false;
       age += dt;
       tickAcc += dt;
@@ -42,12 +51,7 @@ export function createTimingHelpers(runtime, deps) {
       return true;
     });
 
-    return {
-      stop() {
-        stopped = true;
-        if (typeof runtime?.removeOnUpdate === 'function' && cb) runtime.removeOnUpdate(cb);
-      },
-    };
+    return handle;
   }
 
   return {
@@ -98,7 +102,7 @@ export function createTimingHelpers(runtime, deps) {
         ...h,
         aura,
         destroy() {
-          h.stop();
+          h?.stop?.();
           aura?.destroy?.();
         },
       };

@@ -116,7 +116,7 @@ ctx.getEnemies() -> [{position: Vector3, mesh, hp, velocity, takeDamage(amt), ap
 
 ### Spawn entity
 ctx.spawn(mesh, {position, velocity, angularVelocity, gravity, radius, bounce, lifetime, onUpdate}) -> entity
-- entity: mesh, pos, vel, alive, age, destroy(), getPosition(), getVelocity(), setVelocity({x,y,z})
+- entity: mesh, pos, vel, position, velocity, alive, age, destroy(), getPosition(), getVelocity(), setVelocity({x,y,z})
 - onUpdate(dt, elapsed, entity): return false to destroy
 
 ### Visuals

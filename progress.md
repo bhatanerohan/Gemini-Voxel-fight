@@ -158,3 +158,15 @@ Original prompt: i though we aren't using 2 stage weapon generator? / yes do it
   - example prompts
   - project structure
   - local-vs-production deployment caveats for the current Gemini proxy setup
+
+- Fixed spawned-entity velocity/property compatibility in `src/sandbox.js`:
+  - `ctx.spawn(...)` entities now expose `position` and `velocity` accessors in addition to the existing `pos` / `vel` and getter methods.
+  - This prevents generated weapon code from crashing when it uses `entity.velocity.lengthSq()` based on the enemy wrapper shape.
+- Updated `src/prompt.js` spawn-entity docs to advertise the compatibility aliases so future generations are less likely to mix the APIs.
+
+- Hardened SDK timing handles in `src/weaponSdk/timing.js`:
+  - `channel(...)` now always returns a handle with a no-op `stop()` instead of throwing when `runtime.onUpdate` is unavailable.
+  - `spawnZone(...).destroy()` now safely uses optional chaining for its internal timing handle.
+  - This reduces generated-weapon crashes around `.stop()` on partially initialized timing helpers.
+
+- Switched forge model preference in `src/forge.js` to try `gemini-3-flash-preview` first, with existing fallbacks preserved.
