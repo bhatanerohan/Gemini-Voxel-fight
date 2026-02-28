@@ -108,6 +108,183 @@ const _playerForce = new THREE.Vector3();
 const player = { pos: new THREE.Vector3(0, 0.6, 0), vel: new THREE.Vector3(), mesh: null, hp: 100, maxHp: 100, invulnTimer: 0 };
 const enemies = [];
 const arenaProps = [];
+const PLAYER_SKIN_STORAGE_KEY = 'voxel-arena.player-skin.v1';
+const PLAYER_SKIN_PRESETS = [
+  { id: 'neon-ranger', name: 'Neon Ranger', suitColor: 0x2f7dff, accentColor: 0x9fe1ff, skinColor: 0xf5d0b0, visorColor: 0x0a2038, emissive: 0x1144aa, emissiveIntensity: 0.08 },
+  { id: 'ember-guard', name: 'Ember Guard', suitColor: 0xb83a2b, accentColor: 0xffa46a, skinColor: 0xf2c39f, visorColor: 0x2a1010, emissive: 0x66220f, emissiveIntensity: 0.1 },
+  { id: 'jade-sentinel', name: 'Jade Sentinel', suitColor: 0x1e7f62, accentColor: 0x93ffd1, skinColor: 0xe3b58f, visorColor: 0x0d2420, emissive: 0x0e4737, emissiveIntensity: 0.09 },
+  { id: 'void-striker', name: 'Void Striker', suitColor: 0x3a2d7a, accentColor: 0xd0b6ff, skinColor: 0xd8ae93, visorColor: 0x130d2a, emissive: 0x2b1d5a, emissiveIntensity: 0.1 },
+];
+const DEFAULT_PLAYER_SKIN_PRESET_ID = 'neon-ranger';
+let playerSkinState = null;
+let _skinPresetSelect = null;
+let _skinSuitInput = null;
+let _skinAccentInput = null;
+let _skinToneInput = null;
+let _skinVisorInput = null;
+let _skinNameLabel = null;
+
+function getSkinPresetById(id) {
+  return PLAYER_SKIN_PRESETS.find(p => p.id === id) || PLAYER_SKIN_PRESETS[0];
+}
+
+function clampHexColor(value, fallback = 0xffffff) {
+  if (!Number.isFinite(value)) return fallback;
+  return Math.max(0, Math.min(0xffffff, Math.floor(value)));
+}
+
+function toInputHex(value) {
+  return `#${clampHexColor(value).toString(16).padStart(6, '0')}`;
+}
+
+function fromInputHex(value, fallback = 0xffffff) {
+  if (typeof value !== 'string') return fallback;
+  const parsed = Number.parseInt(value.replace('#', ''), 16);
+  return clampHexColor(parsed, fallback);
+}
+
+function buildPlayerSkinConfig(config = {}) {
+  const preset = getSkinPresetById(config.presetId || DEFAULT_PLAYER_SKIN_PRESET_ID);
+  return {
+    presetId: typeof config.presetId === 'string' ? config.presetId : preset.id,
+    presetName: typeof config.presetName === 'string' ? config.presetName : preset.name,
+    suitColor: clampHexColor(config.suitColor ?? preset.suitColor, preset.suitColor),
+    accentColor: clampHexColor(config.accentColor ?? preset.accentColor, preset.accentColor),
+    skinColor: clampHexColor(config.skinColor ?? preset.skinColor, preset.skinColor),
+    visorColor: clampHexColor(config.visorColor ?? preset.visorColor, preset.visorColor),
+    emissive: clampHexColor(config.emissive ?? preset.emissive, preset.emissive),
+    emissiveIntensity: Number.isFinite(config.emissiveIntensity) ? THREE.MathUtils.clamp(config.emissiveIntensity, 0, 1) : preset.emissiveIntensity,
+  };
+}
+
+function loadPlayerSkinConfig() {
+  try {
+    const raw = localStorage.getItem(PLAYER_SKIN_STORAGE_KEY);
+    if (!raw) return buildPlayerSkinConfig();
+    const parsed = JSON.parse(raw);
+    return buildPlayerSkinConfig(parsed);
+  } catch (err) {
+    console.warn('Failed to load player skin config:', err);
+    return buildPlayerSkinConfig();
+  }
+}
+
+function savePlayerSkinConfig() {
+  try {
+    localStorage.setItem(PLAYER_SKIN_STORAGE_KEY, JSON.stringify(playerSkinState));
+  } catch (err) {
+    console.warn('Failed to save player skin config:', err);
+  }
+}
+
+playerSkinState = loadPlayerSkinConfig();
+
+function applySkinToPlayerMesh() {
+  const rig = player.mesh?.userData?.rig;
+  const materials = rig?.materials;
+  if (!materials || !playerSkinState) return;
+  materials.suit.color.setHex(playerSkinState.suitColor);
+  materials.suit.emissive.setHex(playerSkinState.emissive);
+  materials.suit.emissiveIntensity = playerSkinState.emissiveIntensity;
+  materials.accent.color.setHex(playerSkinState.accentColor);
+  materials.accent.emissive.setHex(playerSkinState.emissive);
+  materials.accent.emissiveIntensity = playerSkinState.emissiveIntensity * 0.5;
+  materials.skin.color.setHex(playerSkinState.skinColor);
+  materials.visor.color.setHex(playerSkinState.visorColor);
+}
+
+function syncSkinUi() {
+  if (_skinPresetSelect) {
+    const hasPreset = PLAYER_SKIN_PRESETS.some(p => p.id === playerSkinState.presetId);
+    _skinPresetSelect.value = hasPreset ? playerSkinState.presetId : 'custom';
+  }
+  if (_skinSuitInput) _skinSuitInput.value = toInputHex(playerSkinState.suitColor);
+  if (_skinAccentInput) _skinAccentInput.value = toInputHex(playerSkinState.accentColor);
+  if (_skinToneInput) _skinToneInput.value = toInputHex(playerSkinState.skinColor);
+  if (_skinVisorInput) _skinVisorInput.value = toInputHex(playerSkinState.visorColor);
+  if (_skinNameLabel) _skinNameLabel.textContent = `Current: ${playerSkinState.presetName}`;
+}
+
+function setPlayerSkin(config, { syncUi = true } = {}) {
+  playerSkinState = buildPlayerSkinConfig(config);
+  applySkinToPlayerMesh();
+  savePlayerSkinConfig();
+  if (syncUi) syncSkinUi();
+}
+
+function cyclePlayerSkinPreset() {
+  const index = PLAYER_SKIN_PRESETS.findIndex(p => p.id === playerSkinState.presetId);
+  const next = PLAYER_SKIN_PRESETS[(index + 1 + PLAYER_SKIN_PRESETS.length) % PLAYER_SKIN_PRESETS.length];
+  setPlayerSkin(next);
+}
+
+function randomPlayerColor() {
+  return Math.floor(Math.random() * 0xffffff);
+}
+
+function initSkinUi() {
+  _skinPresetSelect = document.getElementById('player-skin-preset');
+  _skinSuitInput = document.getElementById('player-skin-suit');
+  _skinAccentInput = document.getElementById('player-skin-accent');
+  _skinToneInput = document.getElementById('player-skin-tone');
+  _skinVisorInput = document.getElementById('player-skin-visor');
+  _skinNameLabel = document.getElementById('player-skin-name');
+  const randomButton = document.getElementById('player-skin-random');
+
+  if (!_skinPresetSelect || !_skinSuitInput || !_skinAccentInput || !_skinToneInput || !_skinVisorInput) return;
+
+  _skinPresetSelect.innerHTML = '';
+  for (const preset of PLAYER_SKIN_PRESETS) {
+    const option = document.createElement('option');
+    option.value = preset.id;
+    option.textContent = preset.name;
+    _skinPresetSelect.appendChild(option);
+  }
+  const customOption = document.createElement('option');
+  customOption.value = 'custom';
+  customOption.textContent = 'Custom';
+  _skinPresetSelect.appendChild(customOption);
+
+  _skinPresetSelect.addEventListener('change', () => {
+    if (_skinPresetSelect.value === 'custom') {
+      setPlayerSkin({ ...playerSkinState, presetId: 'custom', presetName: 'Custom' });
+      return;
+    }
+    const preset = getSkinPresetById(_skinPresetSelect.value);
+    setPlayerSkin(preset);
+  });
+
+  const onColorEdit = () => {
+    setPlayerSkin({
+      ...playerSkinState,
+      presetId: 'custom',
+      presetName: 'Custom',
+      suitColor: fromInputHex(_skinSuitInput.value, playerSkinState.suitColor),
+      accentColor: fromInputHex(_skinAccentInput.value, playerSkinState.accentColor),
+      skinColor: fromInputHex(_skinToneInput.value, playerSkinState.skinColor),
+      visorColor: fromInputHex(_skinVisorInput.value, playerSkinState.visorColor),
+    });
+  };
+  _skinSuitInput.addEventListener('input', onColorEdit);
+  _skinAccentInput.addEventListener('input', onColorEdit);
+  _skinToneInput.addEventListener('input', onColorEdit);
+  _skinVisorInput.addEventListener('input', onColorEdit);
+
+  randomButton?.addEventListener('click', () => {
+    setPlayerSkin({
+      ...playerSkinState,
+      presetId: 'custom',
+      presetName: 'Custom',
+      suitColor: randomPlayerColor(),
+      accentColor: randomPlayerColor(),
+      skinColor: randomPlayerColor(),
+      visorColor: randomPlayerColor(),
+      emissive: randomPlayerColor(),
+    });
+  });
+
+  syncSkinUi();
+}
 
 // ── Destructible Crates ──
 function registerArenaProp(prop, collisionMeshes = []) {
@@ -454,6 +631,12 @@ function createVoxelHumanoid({
     speed: 0,
     swing: 0,
     bob: 0,
+    materials: {
+      suit: suitMat,
+      accent: accentMat,
+      skin: skinMat,
+      visor: visorMat,
+    },
   };
 
   group.userData.rig = rig;
@@ -802,15 +985,17 @@ function init() {
 
   // Player - voxel human
   player.mesh = createVoxelHumanoid({
-    suitColor: 0x2f7dff,
-    accentColor: 0x9fe1ff,
-    skinColor: 0xf5d0b0,
-    emissive: 0x1144aa,
-    emissiveIntensity: 0.08,
-    visorColor: 0x0a2038,
+    suitColor: playerSkinState.suitColor,
+    accentColor: playerSkinState.accentColor,
+    skinColor: playerSkinState.skinColor,
+    emissive: playerSkinState.emissive,
+    emissiveIntensity: playerSkinState.emissiveIntensity,
+    visorColor: playerSkinState.visorColor,
     showMuzzleGauntlet: true,
   }).group;
   scene.add(player.mesh);
+  applySkinToPlayerMesh();
+  initSkinUi();
 
   // Enemies - voxel humans (pool size matches WAVE_CONFIG.maxEnemies = 20)
   const ENEMY_POOL_SIZE = 20;
@@ -1365,6 +1550,7 @@ function setupInput() {
       switchWeapon(parseInt(e.key) - 1);
     }
     if (e.key === 't' || e.key === 'T') openForge();
+    if (e.key === 'c' || e.key === 'C') cyclePlayerSkinPreset();
   });
   window.addEventListener('keyup', (e) => {
     keys[e.key.toLowerCase()] = false;

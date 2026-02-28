@@ -32,6 +32,21 @@
 <div id="crosshair"></div>
 <div id="weapon-name"></div>
 <div id="player-level"></div>
+<div id="avatar-skin-ui">
+  <div class="skin-title">Avatar Skin</div>
+  <div class="skin-row">
+    <label for="player-skin-preset">Preset</label>
+    <select id="player-skin-preset"></select>
+  </div>
+  <div class="skin-colors">
+    <label>Suit <input type="color" id="player-skin-suit" value="#2f7dff" /></label>
+    <label>Accent <input type="color" id="player-skin-accent" value="#9fe1ff" /></label>
+    <label>Skin <input type="color" id="player-skin-tone" value="#f5d0b0" /></label>
+    <label>Visor <input type="color" id="player-skin-visor" value="#0a2038" /></label>
+  </div>
+  <button id="player-skin-random" type="button">Randomize</button>
+  <div id="player-skin-name"></div>
+</div>
 
 <!-- Game HUD -->
 <div id="hud-top">
@@ -51,7 +66,7 @@
   <div id="god-text"></div>
 </div>
 
-<div id="hud">WASD move | Mouse aim | Hold click fire | T forge weapon | 1-4 switch weapons</div>
+<div id="hud">WASD move | Mouse aim | Hold click fire | T forge weapon | 1-4 switch weapons | C cycle skin</div>
 
 <!-- Screen flash overlay -->
 <div id="screen-flash"></div>
