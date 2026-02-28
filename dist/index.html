@@ -4,17 +4,45 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Voxel Arena - AI Weapons</title>
-  <script type="module" crossorigin src="/assets/index-DwEM49Nh.js"></script>
-  <link rel="stylesheet" crossorigin href="/assets/index-KDdK4F-5.css">
+  <script type="module" crossorigin src="/assets/index-ClahBSdA.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-BMrDcHHC.css">
 </head>
 <body>
 
 <div id="crosshair"></div>
 <div id="weapon-name"></div>
-<div id="hud">WASD move | Mouse aim locomotion | Hold click fire | T forge weapon</div>
+<div id="player-level"></div>
+
+<!-- Game HUD -->
+<div id="hud-top">
+  <div id="wave-display">WAVE <span id="wave-num">1</span></div>
+  <div id="score-display">SCORE <span id="score-num">0</span></div>
+  <div id="kills-display">KILLS <span id="kills-num">0</span></div>
+</div>
+
+<!-- Center announcements -->
+<div id="wave-announce"></div>
+<div id="wave-clear-banner"></div>
+<div id="hud-center-message"></div>
+
+<div id="hud">WASD move | Mouse aim | Hold click fire | T forge weapon | 1-4 switch weapons</div>
 
 <!-- Screen flash overlay -->
 <div id="screen-flash"></div>
+
+<!-- Weapon Slots -->
+<div id="weapon-slots">
+  <div class="weapon-slot active" data-slot="0"><span class="slot-key">1</span><span class="slot-name">Empty</span></div>
+  <div class="weapon-slot" data-slot="1"><span class="slot-key">2</span><span class="slot-name">Empty</span></div>
+  <div class="weapon-slot" data-slot="2"><span class="slot-key">3</span><span class="slot-name">Empty</span></div>
+  <div class="weapon-slot" data-slot="3"><span class="slot-key">4</span><span class="slot-name">Empty</span></div>
+</div>
+
+<!-- Player Health Bar -->
+<div id="player-health">
+  <div id="player-health-fill"></div>
+  <span id="player-health-text">100</span>
+</div>
 
 <!-- Weapon Forge -->
 <div id="forge-overlay">
@@ -26,8 +54,15 @@
     <div id="forge-error"></div>
   </div>
 </div>
+
+<!-- Game Over Overlay -->
+<div id="game-over-overlay">
+  <div id="game-over-box">
+    <h1>GAME OVER</h1>
+    <p>Score: <span id="game-over-score">0</span></p>
+    <button id="restart-btn">Play Again</button>
+  </div>
+</div>
 
 </body>
 </html>
-
-

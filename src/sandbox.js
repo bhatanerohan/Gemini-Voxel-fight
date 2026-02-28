@@ -2,6 +2,22 @@ import * as THREE from 'three';
 import { Trail } from './trail.js';
 import { ParticlePool } from './particles.js';
 import { createWeaponSdk } from './weaponSdk/index.js';
+import { createSafeContext } from './weaponValidator.js';
+import { saveWeapons, loadWeapons } from './weaponStorage.js';
+import { GameState } from './gameState.js';
+import { updateScore, updateKills, showDamageNumber } from './hud.js';
+import { playHit, playEnemyDeath } from './audio.js';
+
+GameState.on('wave_clear', ({ wave }) => {
+  const bonus = wave * 100;
+  GameState.addScore(bonus);
+  updateScore(GameState.score);
+});
+
+GameState.on('restart', () => {
+  updateScore(0);
+  updateKills(0);
+});
 
 // ── Tracked state ──
 export const entities = [];
@@ -15,6 +31,14 @@ export const intervals = [];
 export let elapsed = 0;
 export let fireFn = null;
 export let lastFire = 0;
+
+const weaponSlots = [
+  { fn: null, name: '' },
+  { fn: null, name: '' },
+  { fn: null, name: '' },
+  { fn: null, name: '' },
+];
+let activeSlot = 0;
 export let shakeAmt = 0;
 export let shakeTime = 0;
 const PLAYER_TORSO_ORIGIN_Y = 0.95;
@@ -132,7 +156,7 @@ export function updateEntities(dt) {
     if (!e.alive) { entities.splice(i, 1); continue; }
     e.age += dt;
     if (e.gravity !== 0) e.vel.y -= 9.81 * (e.gravity ?? 1) * dt;
-    e.pos.add(e.vel.clone().multiplyScalar(dt));
+    e.pos.addScaledVector(e.vel, dt);
     if (e.pos.y < e.radius && e.vel.y < 0) {
       e.pos.y = e.radius;
       e.vel.y *= -(e.bounce ?? 0.3);
@@ -189,6 +213,7 @@ export function updateSandboxTimers(dt) {
   // Tick enemy status effects (burn/freeze/slow/stun timers)
   if (_enemies) {
     for (const e of _enemies) {
+      if (e.alive === false) continue;
       const s = ensureEnemyStatus(e);
 
       if (s.freeze > 0) s.freeze = Math.max(0, s.freeze - dt);
@@ -268,9 +293,24 @@ function flashEnemyHit(e, opts = {}) {
 
 function damageEnemy(e, amt, flashOpts = {}) {
   if (!Number.isFinite(amt) || amt <= 0) return;
+  if (e.alive === false) return;
   e.hp -= amt;
+  playHit();
   flashEnemyHit(e, flashOpts);
+
+  // Floating damage number
+  if (_camera) {
+    const screenPos = e.pos.clone().project(_camera);
+    const x = (screenPos.x * 0.5 + 0.5) * window.innerWidth;
+    const y = (-screenPos.y * 0.5 + 0.5) * window.innerHeight;
+    showDamageNumber(x, y, amt, '#ffcc00');
+  }
+
   if (e.hp <= 0) {
+    playEnemyDeath();
+    GameState.addScore(100);
+    updateKills(GameState.kills);
+    updateScore(GameState.score);
     deathEffect(e.pos.clone());
     respawn(e);
   }
@@ -305,12 +345,10 @@ function addScorchMark(position, radius) {
 
 // ── Respawn enemy ──
 function respawn(e) {
-  e.hp = e.maxHp;
-  e.pos.set((Math.random() - 0.5) * 80, 0.6, (Math.random() - 0.5) * 80);
+  e.alive = false;
+  e.mesh.visible = false;
   e.vel.set(0, 0, 0);
-  clearEnemyStatuses(e);
-  e.bodyMesh.material.emissive.set(0x000000);
-  e.bodyMesh.material.emissiveIntensity = 0;
+  GameState.addKill();
 }
 
 // ── Death effect ──
@@ -628,14 +666,74 @@ export function fire() {
   if (!fireFn) return;
   if (elapsed - lastFire < 0.05) return;
   lastFire = elapsed;
-  try { fireFn(buildCtx()); } catch (e) { console.error('Weapon error:', e); }
+  try { fireFn(createSafeContext(buildCtx())); } catch (e) { console.error('Weapon error:', e); }
 }
 
 // ── Set current weapon ──
-export function setWeapon(fn, name) {
+export function setWeapon(fn, name, code, slot) {
   resetSandbox();
+  const targetSlot = slot ?? getNextEmptySlot();
+  weaponSlots[targetSlot] = { fn, name, code: code || '' };
+  activeSlot = targetSlot;
   fireFn = fn;
-  document.getElementById('weapon-name').textContent = name;
+  updateWeaponSlotsHud();
+  document.getElementById('weapon-name').textContent = name || '';
+  saveWeapons(weaponSlots);
+}
+
+export function switchWeapon(slot) {
+  if (slot < 0 || slot >= 4) return;
+  if (!weaponSlots[slot].fn) return;
+  activeSlot = slot;
+  fireFn = weaponSlots[slot].fn;
+  updateWeaponSlotsHud();
+  document.getElementById('weapon-name').textContent = weaponSlots[slot].name || '';
+}
+
+export function getNextEmptySlot() {
+  const empty = weaponSlots.findIndex(s => !s.fn);
+  return empty >= 0 ? empty : activeSlot;
+}
+
+export function getActiveSlot() { return activeSlot; }
+export function getWeaponSlots() { return weaponSlots; }
+
+function updateWeaponSlotsHud() {
+  document.querySelectorAll('.weapon-slot').forEach((el, i) => {
+    const w = weaponSlots[i];
+    const nameEl = el.querySelector('.slot-name');
+    if (nameEl) nameEl.textContent = w.fn ? w.name : 'Empty';
+    el.classList.toggle('active', i === activeSlot);
+    el.classList.toggle('occupied', !!w.fn);
+  });
+}
+
+// ── Load saved weapons from localStorage ──
+export function loadSavedWeapons() {
+  try {
+    const saved = loadWeapons();
+    if (!saved || saved.length === 0) return;
+    for (const entry of saved) {
+      if (!entry || !entry.code) continue;
+      const idx = typeof entry.slotIndex === 'number' ? entry.slotIndex : 0;
+      if (idx < 0 || idx >= weaponSlots.length) continue;
+      try {
+        const fn = new Function('ctx', entry.code);
+        weaponSlots[idx] = { fn, name: entry.prompt || 'Weapon', code: entry.code };
+      } catch (err) {
+        console.warn(`Failed to compile saved weapon in slot ${idx}:`, err);
+      }
+    }
+    const firstOccupied = weaponSlots.findIndex(s => s && s.fn);
+    if (firstOccupied !== -1) {
+      activeSlot = firstOccupied;
+      fireFn = weaponSlots[firstOccupied].fn;
+      document.getElementById('weapon-name').textContent = weaponSlots[firstOccupied].name;
+    }
+    updateWeaponSlotsHud();
+  } catch (err) {
+    console.warn('Failed to load saved weapons:', err);
+  }
 }
 
 // ── Full cleanup ──

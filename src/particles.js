@@ -9,6 +9,7 @@ export class ParticlePool {
     this.scene = scene;
     this.max = maxParticles;
     this.count = 0;
+    this._cursor = 0; // round-robin cursor for fast slot finding
 
     // Per-particle data (CPU side)
     this.alive = new Uint8Array(maxParticles);
@@ -125,9 +126,13 @@ export class ParticlePool {
   }
 
   _findSlot() {
-    // Find first dead slot
-    for (let i = 0; i < this.max; i++) {
-      if (!this.alive[i]) return i;
+    // Round-robin search from cursor for O(1) average case
+    for (let j = 0; j < this.max; j++) {
+      const i = (this._cursor + j) % this.max;
+      if (!this.alive[i]) {
+        this._cursor = (i + 1) % this.max;
+        return i;
+      }
     }
     return -1; // pool exhausted
   }

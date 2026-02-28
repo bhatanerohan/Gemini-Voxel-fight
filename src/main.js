@@ -5,9 +5,15 @@ import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPa
 import { CSS2DRenderer, CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
 import {
   initSandbox, updateEntities, updateTrails, updateSandboxTimers,
-  updateParticles, fire, getShake, tickShake,
+  updateParticles, fire, getShake, tickShake, setShake, switchWeapon, loadSavedWeapons,
 } from './sandbox.js';
 import { initForge, openForge, closeForge, isForgeOpen } from './forge.js';
+import { initProgression, getProgress, recordGame, getCrosshairColor, getTitle } from './progression.js';
+import { updateLevelDisplay } from './hud.js';
+import { updateEnemyAI } from './enemyAI.js';
+import { GameState } from './gameState.js';
+import { initAudio } from './audio.js';
+import { initWaves, updateWaves, startNextWave } from './waves.js';
 
 // ══════════════════════════════════════════════════
 // STATE
@@ -61,9 +67,15 @@ const tempCameraRayDir = new THREE.Vector3();
 let slowMoTimer = 0;
 let slowMoScale = 1;
 let flashAlpha = 0;
-const flashEl = () => document.getElementById('screen-flash');
+let _cachedFlashEl = null;
+const flashEl = () => (_cachedFlashEl || (_cachedFlashEl = document.getElementById('screen-flash')));
 
-const player = { pos: new THREE.Vector3(0, 0.6, 0), vel: new THREE.Vector3(), mesh: null };
+// Reusable Vector3s for updatePlayer (avoid per-frame allocations)
+const _playerFwd = new THREE.Vector3();
+const _playerRgt = new THREE.Vector3();
+const _playerForce = new THREE.Vector3();
+
+const player = { pos: new THREE.Vector3(0, 0.6, 0), vel: new THREE.Vector3(), mesh: null, hp: 100, maxHp: 100, invulnTimer: 0 };
 const enemies = [];
 
 function createVoxelHumanoid({
@@ -248,8 +260,9 @@ function dampFactor(sharpness, dt) {
   return 1 - Math.exp(-sharpness * dt);
 }
 
+let _cachedCrosshairEl = null;
 function setCrosshairPosition(clientX, clientY) {
-  const crosshair = document.getElementById('crosshair');
+  const crosshair = _cachedCrosshairEl || (_cachedCrosshairEl = document.getElementById('crosshair'));
   if (!crosshair) return;
   crosshair.style.left = `${clientX}px`;
   crosshair.style.top = `${clientY}px`;
@@ -261,12 +274,15 @@ function syncCrosshairToAim() {
   setCrosshairPosition(clientX, clientY);
 }
 
+const _shootOrigin = new THREE.Vector3();
 function getPlayerShootOrigin() {
   const muzzleTip = player.mesh?.userData?.rig?.muzzleTip;
   if (muzzleTip && typeof muzzleTip.getWorldPosition === 'function') {
-    return muzzleTip.getWorldPosition(new THREE.Vector3());
+    return muzzleTip.getWorldPosition(_shootOrigin);
   }
-  return player.pos.clone().add(new THREE.Vector3(0, 0.95, 0));
+  _shootOrigin.copy(player.pos);
+  _shootOrigin.y += 0.95;
+  return _shootOrigin;
 }
 
 function getPlayerAimPoint() {
@@ -411,6 +427,33 @@ export function triggerFlash(alpha = 0.3) {
 }
 
 // ══════════════════════════════════════════════════
+// PROGRESSION
+// ══════════════════════════════════════════════════
+let sessionKills = 0;
+let sessionScore = 0;
+let sessionWave = 1;
+
+function refreshLevelHUD() {
+  const p = getProgress();
+  updateLevelDisplay(p.level, p.xp, p.xpToNext, getTitle());
+}
+
+function applyCrosshairReward() {
+  const color = getCrosshairColor();
+  const crosshair = document.getElementById('crosshair');
+  if (crosshair) crosshair.style.setProperty('--crosshair-color', color);
+}
+
+export function onGameOver() {
+  recordGame(sessionScore, sessionKills, sessionWave);
+  refreshLevelHUD();
+  applyCrosshairReward();
+  sessionKills = 0;
+  sessionScore = 0;
+  sessionWave = 1;
+}
+
+// ══════════════════════════════════════════════════
 // INIT
 // ══════════════════════════════════════════════════
 function init() {
@@ -423,6 +466,8 @@ function init() {
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 0.98;
   document.body.appendChild(renderer.domElement);
+
+  initAudio();
 
   // CSS2D Renderer for health bars
   labelRenderer = new CSS2DRenderer();
@@ -503,19 +548,46 @@ function init() {
     aimCollisionMeshes.push(m);
   });
 
-  // Obstacles — darker, more dramatic
-  const om = new THREE.MeshStandardMaterial({ color: 0x252540, roughness: 0.6, metalness: 0.3 });
-  [
-    [8, -8, 3, 1.5, 3], [-20, 5, 5, 2, 2], [15, 20, 2, 1, 6], [-10, -25, 4, 3, 4],
-    [30, -5, 2, 1, 8], [-30, -20, 3, 2, 3], [25, 25, 4, 1.5, 4], [-15, 30, 6, 2, 2],
-  ].forEach(([x, z, sx, sy, sz]) => {
-    const m = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), om);
+  // ── Arena Obstacles ──
+  const obstacleMat = new THREE.MeshStandardMaterial({ color: 0x252540, roughness: 0.6, metalness: 0.3 });
+  const platformMat = new THREE.MeshStandardMaterial({ color: 0x2a2a50, roughness: 0.5, metalness: 0.4 });
+  const accentMat = new THREE.MeshStandardMaterial({
+    color: 0x003366, emissive: 0x001133, emissiveIntensity: 0.3, roughness: 0.3, metalness: 0.6
+  });
+
+  // Cover blocks — symmetrical layout for fair gameplay
+  const coverBlocks = [
+    [12, 12, 2, 2.5, 2], [-12, 12, 2, 2.5, 2], [12, -12, 2, 2.5, 2], [-12, -12, 2, 2.5, 2],
+    [0, 22, 6, 1.8, 1.2], [0, -22, 6, 1.8, 1.2], [22, 0, 1.2, 1.8, 6], [-22, 0, 1.2, 1.8, 6],
+    [30, 18, 3, 1.5, 3], [-30, 18, 3, 1.5, 3], [30, -18, 3, 1.5, 3], [-30, -18, 3, 1.5, 3],
+    [-8, -30, 2, 1, 4], [8, 30, 2, 1, 4],
+  ];
+
+  coverBlocks.forEach(([x, z, sx, sy, sz]) => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), obstacleMat);
     m.position.set(x, sy / 2, z);
     m.castShadow = true;
     m.receiveShadow = true;
     scene.add(m);
     cameraCollisionMeshes.push(m);
     aimCollisionMeshes.push(m);
+  });
+
+  // Elevated platforms
+  [
+    { x: -35, z: -35, w: 8, h: 1.5, d: 8 },
+    { x: 35, z: 35, w: 8, h: 1.5, d: 8 },
+  ].forEach(({ x, z, w, h, d }) => {
+    const plat = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), platformMat);
+    plat.position.set(x, h / 2, z);
+    plat.castShadow = true;
+    plat.receiveShadow = true;
+    scene.add(plat);
+    cameraCollisionMeshes.push(plat);
+    aimCollisionMeshes.push(plat);
+    const strip = new THREE.Mesh(new THREE.BoxGeometry(w + 0.2, 0.1, d + 0.2), accentMat);
+    strip.position.set(x, h + 0.05, z);
+    scene.add(strip);
   });
 
   // Player - voxel human
@@ -566,8 +638,10 @@ function init() {
       yaw: 0,
       mesh: group,
       bodyMesh: ebody,
+      alive: true,
       hp: 100,
       maxHp: 100,
+      attackCooldown: 0,
       status: {
         freeze: 0,
         stun: 0,
@@ -585,14 +659,27 @@ function init() {
   // Init sandbox with references
   initSandbox(scene, camera, player, enemies, () => playerYaw, () => getPlayerAimPoint(), { triggerSlowMo, triggerFlash });
 
+  // Init wave system
+  initWaves(scene, enemies, null);
+  setTimeout(() => startNextWave(), 1500);
+
   // Init forge UI
   initForge({
     onOpen: () => { mouseDown = false; },
     onClose: () => {},
   });
 
+  // Load saved weapons
+  loadSavedWeapons();
+
+  // Progression
+  initProgression();
+  refreshLevelHUD();
+  applyCrosshairReward();
+
   // Input
   setupInput();
+  document.getElementById('restart-btn')?.addEventListener('click', restartGame);
   syncCrosshairToAim();
 
   // Game loop
@@ -618,17 +705,18 @@ function init() {
       flashEl().style.opacity = 0;
     }
 
-    if (!isForgeOpen()) {
+    if (!isForgeOpen() && GameState.phase === 'playing' && player.hp > 0) {
       updateAimLocomotion(dt);
       updatePlayer(dt);
       if (mouseDown) fire();
     }
-    updateEnemies(dt);
+    if (GameState.phase === 'playing') updateEnemies(dt);
     updateEntities(dt);
     updateTrails(dt);
     updateSandboxTimers(dt);
     updateParticles(dt);
     updateHealthBars();
+    updateWaves(dt);
     updateCamera(dt);
 
     if (composer) composer.render();
@@ -651,9 +739,51 @@ function init() {
 // ══════════════════════════════════════════════════
 function updateHealthBars() {
   for (const e of enemies) {
+    if (e.alive === false) continue;
     const pct = Math.max(0, e.hp / e.maxHp) * 100;
     e.barFill.style.width = pct + '%';
     e.barFill.className = 'health-bar-fill ' + (pct > 60 ? 'healthy' : pct > 30 ? 'mid' : 'low');
+  }
+}
+
+function updatePlayerHealthBar() {
+  const pct = Math.max(0, player.hp / player.maxHp) * 100;
+  const fill = document.getElementById('player-health-fill');
+  const text = document.getElementById('player-health-text');
+  if (fill) {
+    fill.style.width = pct + '%';
+    fill.style.background = pct > 60 ? '#44ff66' : pct > 30 ? '#ffaa22' : '#ff3344';
+  }
+  if (text) text.textContent = Math.ceil(player.hp);
+}
+
+function playerDeath() {
+  player.hp = 0;
+  updatePlayerHealthBar();
+  triggerSlowMo(1.0, 0.2);
+  triggerFlash(0.5);
+  const overlay = document.getElementById('game-over-overlay');
+  if (overlay) {
+    overlay.classList.add('active');
+    document.getElementById('game-over-score').textContent = '0';
+  }
+}
+
+function restartGame() {
+  GameState.restart();
+  player.hp = player.maxHp;
+  player.pos.set(0, 0.6, 0);
+  player.vel.set(0, 0, 0);
+  player.invulnTimer = 0;
+  updatePlayerHealthBar();
+  const overlay = document.getElementById('game-over-overlay');
+  if (overlay) overlay.classList.remove('active');
+  for (const e of enemies) {
+    e.hp = e.maxHp;
+    e.pos.set((Math.random() - 0.5) * 60, 0.6, (Math.random() - 0.5) * 60);
+    e.vel.set(0, 0, 0);
+    e.mesh.visible = true;
+    e.attackCooldown = 0;
   }
 }
 
@@ -661,28 +791,29 @@ function updateHealthBars() {
 // PLAYER
 // ══════════════════════════════════════════════════
 function updatePlayer(dt) {
-  const fwd = new THREE.Vector3(-Math.sin(playerYaw), 0, -Math.cos(playerYaw));
-  const rgt = new THREE.Vector3(Math.cos(playerYaw), 0, -Math.sin(playerYaw));
+  if (player.invulnTimer > 0) player.invulnTimer -= dt;
+  _playerFwd.set(-Math.sin(playerYaw), 0, -Math.cos(playerYaw));
+  _playerRgt.set(Math.cos(playerYaw), 0, -Math.sin(playerYaw));
   const a = 40, drag = 5;
-  const f = new THREE.Vector3();
+  _playerForce.set(0, 0, 0);
 
-  if (keys['w'] || keys['arrowup']) f.add(fwd.clone().multiplyScalar(a));
-  if (keys['s'] || keys['arrowdown']) f.add(fwd.clone().multiplyScalar(-a));
-  if (keys['a']) f.add(rgt.clone().multiplyScalar(-a));
-  if (keys['d']) f.add(rgt.clone().multiplyScalar(a));
-  if (keys['shift']) f.multiplyScalar(1.8);
+  if (keys['w'] || keys['arrowup']) _playerForce.addScaledVector(_playerFwd, a);
+  if (keys['s'] || keys['arrowdown']) _playerForce.addScaledVector(_playerFwd, -a);
+  if (keys['a']) _playerForce.addScaledVector(_playerRgt, -a);
+  if (keys['d']) _playerForce.addScaledVector(_playerRgt, a);
+  if (keys['shift']) _playerForce.multiplyScalar(1.8);
 
-  player.vel.add(f.multiplyScalar(dt));
+  player.vel.addScaledVector(_playerForce, dt);
   player.vel.multiplyScalar(1 - drag * dt);
-  player.pos.add(player.vel.clone().multiplyScalar(dt));
+  player.pos.addScaledVector(player.vel, dt);
   player.pos.x = THREE.MathUtils.clamp(player.pos.x, -48, 48);
   player.pos.z = THREE.MathUtils.clamp(player.pos.z, -48, 48);
   player.pos.y = 0.6;
   player.mesh.position.copy(player.pos);
   player.mesh.rotation.y = playerYaw;
   animateHumanoid(player.mesh, dt, Math.hypot(player.vel.x, player.vel.z), {
-    localForward: player.vel.dot(fwd),
-    localRight: player.vel.dot(rgt),
+    localForward: player.vel.dot(_playerFwd),
+    localRight: player.vel.dot(_playerRgt),
   });
 }
 
@@ -691,6 +822,7 @@ function updatePlayer(dt) {
 // ══════════════════════════════════════════════════
 function updateEnemies(dt) {
   for (const e of enemies) {
+    if (e.alive === false) continue;
     const s = e.status || (e.status = {
       freeze: 0,
       stun: 0,
@@ -709,6 +841,12 @@ function updateEnemies(dt) {
     const dz = player.pos.z - e.pos.z;
     const dist = Math.sqrt(dx * dx + dz * dz);
 
+    // Skip complex AI for enemies beyond 80 units
+    if (dist > 80) {
+      e.mesh.position.copy(e.pos);
+      continue;
+    }
+
     if (frozen) {
       e.vel.set(0, 0, 0);
       e.pos.y = Math.max(e.pos.y, 0.6);
@@ -719,24 +857,7 @@ function updateEnemies(dt) {
     }
 
     if (!stunned) {
-      if (dist > 10 && dist < 60) {
-        e.vel.x += (dx / dist) * 15 * slowScale * dt;
-        e.vel.z += (dz / dist) * 15 * slowScale * dt;
-      } else if (dist < 6 && dist > 0.1) {
-        e.vel.x -= (dx / dist) * 12 * slowScale * dt;
-        e.vel.z -= (dz / dist) * 12 * slowScale * dt;
-      }
-
-      for (const o of enemies) {
-        if (o === e) continue;
-        const ox = e.pos.x - o.pos.x;
-        const oz = e.pos.z - o.pos.z;
-        const od = Math.sqrt(ox * ox + oz * oz);
-        if (od < 5 && od > 0.1) {
-          e.vel.x += (ox / od) * 10 * slowScale * dt;
-          e.vel.z += (oz / od) * 10 * slowScale * dt;
-        }
-      }
+      updateEnemyAI(e, player, enemies, dt, slowScale);
     }
 
     // Gravity pulls enemies down when airborne
@@ -763,7 +884,7 @@ function updateEnemies(dt) {
       e.vel.z *= slowDamp;
     }
 
-    e.pos.add(e.vel.clone().multiplyScalar(dt));
+    e.pos.addScaledVector(e.vel, dt);
     e.pos.x = THREE.MathUtils.clamp(e.pos.x, -48, 48);
     e.pos.z = THREE.MathUtils.clamp(e.pos.z, -48, 48);
     if (e.pos.y < 0.6) e.pos.y = 0.6;
@@ -771,7 +892,55 @@ function updateEnemies(dt) {
     e.mesh.position.copy(e.pos);
     e.mesh.rotation.y = e.yaw;
     animateHumanoid(e.mesh, dt, Math.hypot(e.vel.x, e.vel.z));
+
+    // Melee attack
+    if (!frozen && !stunned && dist < 2.5) {
+      e.attackCooldown = (e.attackCooldown ?? 0) - dt;
+      if (e.attackCooldown <= 0) {
+        e.attackCooldown = 1.2;
+        if (player.invulnTimer <= 0 && player.hp > 0) {
+          player.hp -= 10;
+          player.invulnTimer = 0.3;
+          triggerFlash(0.2);
+          setShake(0.4, 0.2);
+          updatePlayerHealthBar();
+          if (player.hp <= 0) {
+            playerDeath();
+          }
+        }
+      }
+    }
   }
+}
+
+// ══════════════════════════════════════════════════
+// ENEMY OBJECT POOLING
+// ══════════════════════════════════════════════════
+export function respawnEnemy(x, z, hp = 100) {
+  const dead = enemies.find(e => e.hp <= 0);
+  if (!dead) return null;
+  dead.hp = hp;
+  dead.maxHp = hp;
+  dead.alive = true;
+  dead.pos.set(x, 0.6, z);
+  dead.vel.set(0, 0, 0);
+  dead.yaw = 0;
+  dead.attackCooldown = 0;
+  dead.mesh.visible = true;
+  dead.mesh.position.copy(dead.pos);
+  if (dead.status) {
+    dead.status.freeze = 0;
+    dead.status.stun = 0;
+    dead.status.slowMult = 1;
+    dead.status.slowTime = 0;
+    dead.status.burnDps = 0;
+    dead.status.burnTime = 0;
+    dead.status.burnTick = 0.15;
+    dead.status.burnAcc = 0;
+  }
+  dead.bodyMesh.material.emissive.set(0x000000);
+  dead.bodyMesh.material.emissiveIntensity = 0;
+  return dead;
 }
 
 // ══════════════════════════════════════════════════
@@ -845,6 +1014,9 @@ function setupInput() {
   window.addEventListener('keydown', (e) => {
     if (isForgeOpen()) return;
     keys[e.key.toLowerCase()] = true;
+    if (e.key >= '1' && e.key <= '4') {
+      switchWeapon(parseInt(e.key) - 1);
+    }
     if (e.key === 't' || e.key === 'T') openForge();
   });
   window.addEventListener('keyup', (e) => {

@@ -1,18 +1,16 @@
 import { setWeapon } from './sandbox.js';
 import { CODER_PROMPT } from './prompt.js';
+import { playForgeOpen, playForgeComplete } from './audio.js';
+import { validateWeaponCode } from './weaponValidator.js';
 
 const GEMINI_CHAT_COMPLETIONS_PATH = '/gemini/chat/completions';
 const GEMINI_MODELS = ['gemini-3-pro-preview', 'gemini-3-flash-preview', 'gemini-2.5-flash'];
-const ENV_GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY?.trim() ?? '';
 
-let apiKey = ENV_GEMINI_API_KEY;
 let forgeOpen = false;
 let onOpenCb = null;
 let onCloseCb = null;
 
 export function isForgeOpen() { return forgeOpen; }
-
-export function setApiKey(key) { apiKey = key; }
 
 export function initForge(callbacks = {}) {
   onOpenCb = callbacks.onOpen;
@@ -45,25 +43,35 @@ export function initForge(callbacks = {}) {
     errEl.textContent = '';
 
     try {
-      status.textContent = 'Generating weapon with Gemini...';
+      status.innerHTML = '<span class="forge-loading">Forging weapon<span class="dots"></span></span>';
       const coderInput = `## PLAYER WEAPON REQUEST:\n"${prompt}"\n\nImplement a weapon that matches this request. Infer missing details if needed. Output ONLY the function body code.`;
       const generationStart = performance.now();
       const { code, model } = await callLLM(CODER_PROMPT, coderInput);
       const generationMs = Math.round(performance.now() - generationStart);
 
-      status.textContent = 'Compiling...';
+      status.innerHTML = '<span class="forge-loading">Compiling<span class="dots"></span></span>';
       const cleanCode = code.replace(/^```(?:javascript|js)?\n?/i, '').replace(/\n?```$/i, '').trim();
       console.log('Gemini model used:', model, `| generation time: ${generationMs} ms`);
       console.log('Generated weapon code:\n', cleanCode);
 
+      const validation = validateWeaponCode(cleanCode);
+      if (!validation.valid) {
+        const msg = 'Weapon code blocked:\n• ' + validation.errors.join('\n• ');
+        console.warn(msg);
+        errEl.textContent = msg;
+        status.innerHTML = '<span class="forge-fail">Weapon rejected — unsafe code detected</span>';
+        return;
+      }
+
       const fn = new Function('ctx', cleanCode);
-      setWeapon(fn, prompt);
-      status.textContent = 'Weapon ready!';
+      setWeapon(fn, prompt, cleanCode);
+      status.innerHTML = '<span class="forge-success">⚡ Weapon ready!</span>';
+      playForgeComplete();
       setTimeout(closeForge, 700);
     } catch (err) {
       console.error('Forge error:', err);
       errEl.textContent = err.message;
-      status.textContent = 'Failed - try again';
+      status.innerHTML = '<span class="forge-fail">Generation failed — try again</span>';
     } finally {
       btn.disabled = false;
     }
@@ -72,6 +80,7 @@ export function initForge(callbacks = {}) {
 
 export function openForge() {
   forgeOpen = true;
+  playForgeOpen();
   document.getElementById('forge-overlay').classList.add('open');
   document.getElementById('forge-input').focus();
   document.getElementById('forge-error').textContent = '';
@@ -106,7 +115,6 @@ async function requestCompletion(systemPrompt, userMessage, model) {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
       model,
@@ -135,8 +143,6 @@ async function requestCompletion(systemPrompt, userMessage, model) {
 }
 
 async function callLLM(systemPrompt, userMessage, models = GEMINI_MODELS) {
-  if (!apiKey) throw new Error('Missing Gemini API key. Set VITE_GEMINI_API_KEY in .env.');
-
   let lastError = null;
   for (const model of models) {
     try {
