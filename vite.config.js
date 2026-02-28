@@ -2,7 +2,7 @@ import { defineConfig, loadEnv } from 'vite';
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
-  const geminiKey = env.VITE_GEMINI_API_KEY || '';
+  const geminiKey = env.GEMINI_API_KEY || '';
 
   return {
     server: {

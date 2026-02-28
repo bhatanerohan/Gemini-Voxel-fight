@@ -3,6 +3,10 @@ import * as THREE from 'three';
 import { GameState } from './gameState.js';
 import { updateWave, showWaveAnnounce, showWaveClear, showMessage } from './hud.js';
 import { playWaveStart } from './audio.js';
+import { MatchMemory } from './matchMemory.js';
+import { generateEnemyIdentities, applyIdentity } from './enemyIdentity.js';
+import { pickEnemyType, getTypeConfig } from './enemyTypes.js';
+import { clearStatus } from './statusEffects.js';
 
 let _scene = null;
 let _enemies = [];
@@ -46,6 +50,7 @@ export function initWaves(scene, enemies, createEnemyFn) {
 export function startNextWave() {
   const wave = GameState.wave + 1;
   GameState.startWave(wave);
+  MatchMemory.recordWaveStart(wave);
   updateWave(wave);
   showWaveAnnounce(wave);
   playWaveStart();
@@ -61,19 +66,54 @@ export function startNextWave() {
   // Spawn/reuse enemies
   spawnWaveEnemies(count, hp, speedMult);
   waveActive = true;
+
+  // Generate identities asynchronously (fire-and-forget)
+  if (wave >= 2) {
+    generateEnemyIdentities(wave, count).then(identities => {
+      if (!identities.length) return;
+      const activeEnemies = _enemies.filter(e => e.alive);
+      for (let i = 0; i < activeEnemies.length && i < identities.length; i++) {
+        applyIdentity(activeEnemies[i], identities[i]);
+        if (activeEnemies[i].nameEl) {
+          activeEnemies[i].nameEl.textContent = activeEnemies[i].identity.fullName;
+        }
+      }
+    });
+  }
 }
 
 function spawnWaveEnemies(count, hp, speedMult) {
+  const wave = GameState.wave;
   // Reuse existing enemy objects or note we need more
   for (let i = 0; i < _enemies.length; i++) {
     if (i < count) {
       const e = _enemies[i];
-      e.hp = hp;
-      e.maxHp = hp;
+      e.identity = null;
+      if (e.nameEl) e.nameEl.textContent = '';
+
+      // Assign enemy type based on wave composition
+      const typeName = pickEnemyType(wave);
+      const typeConfig = getTypeConfig(typeName);
+      e.typeConfig = typeConfig;
+      e.typeName = typeName;
+
+      // Scale HP from type base + wave scaling
+      e.hp = typeConfig.hp + (wave - 1) * WAVE_CONFIG.hpPerWave;
+      e.maxHp = e.hp;
+
       e.alive = true;
       e.mesh.visible = true;
       e.attackCooldown = 0;
       e.vel.set(0, 0, 0);
+      // Clear arena god modifiers from previous wave
+      e.resistType = null;
+      e.speedBuff = 1;
+
+      // Apply type-specific visuals
+      if (e.mesh.userData.rig?.root) {
+        e.mesh.userData.rig.root.scale.setScalar(typeConfig.scale);
+      }
+      e.bodyMesh.material.color.setHex(typeConfig.colors.suit);
       // Spawn at random position around arena edge
       const angle = Math.random() * Math.PI * 2;
       const dist = WAVE_CONFIG.spawnMinDist + Math.random() * (WAVE_CONFIG.spawnMaxDist - WAVE_CONFIG.spawnMinDist);
@@ -87,12 +127,7 @@ function spawnWaveEnemies(count, hp, speedMult) {
       e.mesh.position.copy(e.pos);
       // Clear status effects
       if (e.status) {
-        e.status.freeze = 0;
-        e.status.stun = 0;
-        e.status.slowMult = 1;
-        e.status.slowTime = 0;
-        e.status.burnDps = 0;
-        e.status.burnTime = 0;
+        clearStatus(e.status);
       }
     } else {
       // Hide extra enemies
@@ -107,10 +142,12 @@ export function updateWaves(dt) {
 
   if (waveActive) {
     // Check if all enemies are dead
-    const aliveCount = _enemies.filter(e => e.alive).length;
+    let aliveCount = 0;
+    for (let i = 0; i < _enemies.length; i++) { if (_enemies[i].alive) aliveCount++; }
     if (aliveCount === 0) {
       // Wave cleared!
       waveActive = false;
+      MatchMemory.recordWaveClear(GameState.wave);
       GameState.endWave();
       showWaveClear();
       GameState.addScore(GameState.wave * 100); // wave clear bonus

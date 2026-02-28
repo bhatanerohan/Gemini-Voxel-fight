@@ -36,8 +36,9 @@ function applySeparation(e, allEnemies, dt, slowScale) {
     if (o === e || o.alive === false) continue;
     const ox = e.pos.x - o.pos.x;
     const oz = e.pos.z - o.pos.z;
-    const od = Math.sqrt(ox * ox + oz * oz);
-    if (od < 5 && od > 0.1) {
+    const odSq = ox * ox + oz * oz;
+    if (odSq < 25 && odSq > 0.01) {
+      const od = Math.sqrt(odSq);
       e.vel.x += (ox / od) * 10 * slowScale * dt;
       e.vel.z += (oz / od) * 10 * slowScale * dt;
     }

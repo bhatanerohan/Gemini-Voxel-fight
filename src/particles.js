@@ -61,6 +61,8 @@ export class ParticlePool {
     this.points = new THREE.Points(geo, mat);
     this.points.frustumCulled = false;
     scene.add(this.points);
+    this._wasDirty = false;
+    this._reusableColor = new THREE.Color();
   }
 
   /**
@@ -89,7 +91,7 @@ export class ParticlePool {
     const py = position.y ?? 0;
     const pz = position.z ?? 0;
 
-    const col = new THREE.Color(color);
+    const col = this._reusableColor.set(color);
 
     for (let i = 0; i < count; i++) {
       const slot = this._findSlot();
@@ -141,10 +143,7 @@ export class ParticlePool {
     let anyAlive = false;
 
     for (let i = 0; i < this.max; i++) {
-      if (!this.alive[i]) {
-        this.sizes[i] = 0; // hide dead particles
-        continue;
-      }
+      if (!this.alive[i]) continue;
 
       anyAlive = true;
       this.ages[i] += dt;
@@ -183,9 +182,12 @@ export class ParticlePool {
       this.sizes[i] = this.startSizes[i] * (1 + t * 0.5) * fade;
     }
 
-    // Upload to GPU
-    this.points.geometry.attributes.position.needsUpdate = true;
-    this.points.geometry.attributes.color.needsUpdate = true;
-    this.points.geometry.attributes.size.needsUpdate = true;
+    // Only upload to GPU when particles are active or were just active
+    if (anyAlive || this._wasDirty) {
+      this.points.geometry.attributes.position.needsUpdate = true;
+      this.points.geometry.attributes.color.needsUpdate = true;
+      this.points.geometry.attributes.size.needsUpdate = true;
+      this._wasDirty = anyAlive;
+    }
   }
 }

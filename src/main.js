@@ -6,19 +6,27 @@ import { CSS2DRenderer, CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRe
 import {
   initSandbox, updateEntities, updateTrails, updateSandboxTimers,
   updateParticles, fire, getShake, tickShake, setShake, switchWeapon, loadSavedWeapons,
+  getActiveWeaponName, tickFrame,
 } from './sandbox.js';
 import { initForge, openForge, closeForge, isForgeOpen } from './forge.js';
 import { initProgression, getProgress, recordGame, getCrosshairColor, getTitle } from './progression.js';
 import { updateLevelDisplay } from './hud.js';
 import { updateEnemyAI } from './enemyAI.js';
 import { GameState } from './gameState.js';
-import { initAudio } from './audio.js';
+import { initAudio, startAmbientMusic, playPlayerHit } from './audio.js';
 import { initWaves, updateWaves, startNextWave } from './waves.js';
+import { createDefaultStatus, clearStatus } from './statusEffects.js';
+import { MatchMemory } from './matchMemory.js';
+import { initArenaGod } from './arenaGod.js';
+import { saveSessionSummary } from './sessionMemory.js';
+import { generateChronicle, displayChronicle, hideChronicle } from './warChronicle.js';
+import { initMutations, updateMutations } from './arenaMutations.js';
 
 // ══════════════════════════════════════════════════
 // STATE
 // ══════════════════════════════════════════════════
 let renderer, labelRenderer, scene, camera, composer;
+const coverBlockMeshes = [];
 let keys = {};
 let mouseDown = false;
 let playerYaw = 0;
@@ -429,10 +437,6 @@ export function triggerFlash(alpha = 0.3) {
 // ══════════════════════════════════════════════════
 // PROGRESSION
 // ══════════════════════════════════════════════════
-let sessionKills = 0;
-let sessionScore = 0;
-let sessionWave = 1;
-
 function refreshLevelHUD() {
   const p = getProgress();
   updateLevelDisplay(p.level, p.xp, p.xpToNext, getTitle());
@@ -445,12 +449,9 @@ function applyCrosshairReward() {
 }
 
 export function onGameOver() {
-  recordGame(sessionScore, sessionKills, sessionWave);
+  recordGame(GameState.score, GameState.kills, GameState.wave);
   refreshLevelHUD();
   applyCrosshairReward();
-  sessionKills = 0;
-  sessionScore = 0;
-  sessionWave = 1;
 }
 
 // ══════════════════════════════════════════════════
@@ -468,6 +469,7 @@ function init() {
   document.body.appendChild(renderer.domElement);
 
   initAudio();
+  document.addEventListener('click', () => startAmbientMusic(), { once: true });
 
   // CSS2D Renderer for health bars
   labelRenderer = new CSS2DRenderer();
@@ -571,6 +573,7 @@ function init() {
     scene.add(m);
     cameraCollisionMeshes.push(m);
     aimCollisionMeshes.push(m);
+    coverBlockMeshes.push(m);
   });
 
   // Elevated platforms
@@ -602,14 +605,17 @@ function init() {
   }).group;
   scene.add(player.mesh);
 
-  // Enemies - voxel humans
+  // Enemies - voxel humans (pool size matches WAVE_CONFIG.maxEnemies = 20)
+  const ENEMY_POOL_SIZE = 20;
   const enemyColors = [0xff3344, 0xff6622, 0xee2266, 0xff4444, 0xcc3355,
                         0xff5533, 0xdd2244, 0xff3366, 0xee4422, 0xff2255];
   const enemyAccent = [0xffa07a, 0xffb86b, 0xff8aa1, 0xff9077, 0xea8ca2];
-  [
-    [15, 0], [-15, 8], [8, -20], [-12, -12], [20, 15],
-    [-25, 0], [0, 25], [10, 10], [-8, 18], [25, -10],
-  ].forEach(([x, z], i) => {
+  const enemySpawns = [];
+  for (let i = 0; i < ENEMY_POOL_SIZE; i++) {
+    const angle = (i / ENEMY_POOL_SIZE) * Math.PI * 2;
+    enemySpawns.push([Math.cos(angle) * 20, Math.sin(angle) * 20]);
+  }
+  enemySpawns.forEach(([x, z], i) => {
     const col = enemyColors[i % enemyColors.length];
     const { group, bodyMesh: ebody } = createVoxelHumanoid({
       suitColor: col,
@@ -624,6 +630,10 @@ function init() {
     // Health bar (CSS2D)
     const barContainer = document.createElement('div');
     barContainer.className = 'health-bar-container';
+    const nameEl = document.createElement('div');
+    nameEl.className = 'enemy-name-label';
+    nameEl.textContent = '';
+    barContainer.appendChild(nameEl);
     const barFill = document.createElement('div');
     barFill.className = 'health-bar-fill healthy';
     barFill.style.width = '100%';
@@ -642,22 +652,15 @@ function init() {
       hp: 100,
       maxHp: 100,
       attackCooldown: 0,
-      status: {
-        freeze: 0,
-        stun: 0,
-        slowMult: 1,
-        slowTime: 0,
-        burnDps: 0,
-        burnTime: 0,
-        burnTick: 0.15,
-        burnAcc: 0,
-      },
+      status: createDefaultStatus(),
       barFill,
+      nameEl,
     });
   });
 
   // Init sandbox with references
   initSandbox(scene, camera, player, enemies, () => playerYaw, () => getPlayerAimPoint(), { triggerSlowMo, triggerFlash });
+  MatchMemory.setWeaponGetter(getActiveWeaponName);
 
   // Init wave system
   initWaves(scene, enemies, null);
@@ -674,12 +677,31 @@ function init() {
 
   // Progression
   initProgression();
+  initArenaGod();
+  initMutations(scene, coverBlockMeshes, player, enemies);
+
+  // Hazard damage listener
+  GameState.on('hazard_player_hit', () => {
+    triggerFlash(0.15);
+    updatePlayerHealthBar();
+    if (player.hp <= 0) playerDeath();
+  });
   refreshLevelHUD();
   applyCrosshairReward();
 
   // Input
   setupInput();
   document.getElementById('restart-btn')?.addEventListener('click', restartGame);
+  document.getElementById('chronicle-share-btn')?.addEventListener('click', () => {
+    const title = document.getElementById('chronicle-title')?.textContent || '';
+    const text = document.getElementById('chronicle-text')?.textContent || '';
+    const moment = document.getElementById('chronicle-moment')?.textContent || '';
+    const full = `${title}\n\n${text}\n\n${moment}\n\n— Voxel Arena`;
+    navigator.clipboard.writeText(full).then(() => {
+      const btn = document.getElementById('chronicle-share-btn');
+      if (btn) { btn.textContent = 'Copied!'; setTimeout(() => btn.textContent = 'Copy Chronicle', 2000); }
+    });
+  });
   syncCrosshairToAim();
 
   // Game loop
@@ -689,6 +711,7 @@ function init() {
     const now = performance.now();
     let dt = Math.min((now - last) / 1000, 0.05);
     last = now;
+    tickFrame();
 
     // Slow-mo
     if (slowMoTimer > 0) {
@@ -717,6 +740,7 @@ function init() {
     updateParticles(dt);
     updateHealthBars();
     updateWaves(dt);
+    updateMutations(dt);
     updateCamera(dt);
 
     if (composer) composer.render();
@@ -741,6 +765,8 @@ function updateHealthBars() {
   for (const e of enemies) {
     if (e.alive === false) continue;
     const pct = Math.max(0, e.hp / e.maxHp) * 100;
+    if (e._lastPct === pct) continue;
+    e._lastPct = pct;
     e.barFill.style.width = pct + '%';
     e.barFill.className = 'health-bar-fill ' + (pct > 60 ? 'healthy' : pct > 30 ? 'mid' : 'low');
   }
@@ -758,19 +784,27 @@ function updatePlayerHealthBar() {
 }
 
 function playerDeath() {
+  saveSessionSummary();
   player.hp = 0;
   updatePlayerHealthBar();
+  GameState.gameOver();
+  onGameOver();
   triggerSlowMo(1.0, 0.2);
   triggerFlash(0.5);
   const overlay = document.getElementById('game-over-overlay');
   if (overlay) {
     overlay.classList.add('active');
-    document.getElementById('game-over-score').textContent = '0';
+    document.getElementById('game-over-score').textContent = GameState.score;
   }
+  generateChronicle().then(chronicle => {
+    if (chronicle) displayChronicle(chronicle);
+  });
 }
 
 function restartGame() {
+  hideChronicle();
   GameState.restart();
+  MatchMemory.reset();
   player.hp = player.maxHp;
   player.pos.set(0, 0.6, 0);
   player.vel.set(0, 0, 0);
@@ -818,21 +852,27 @@ function updatePlayer(dt) {
 }
 
 // ══════════════════════════════════════════════════
+// ENEMY TAUNTS
+// ══════════════════════════════════════════════════
+function showEnemyTaunt(e) {
+  if (!e.identity?.taunt) return;
+  const el = document.createElement('div');
+  el.className = 'enemy-taunt';
+  el.textContent = `"${e.identity.taunt}"`;
+  const screenPos = e.pos.clone().add(new THREE.Vector3(0, 2.5, 0)).project(camera);
+  el.style.left = ((screenPos.x * 0.5 + 0.5) * window.innerWidth) + 'px';
+  el.style.top = ((-screenPos.y * 0.5 + 0.5) * window.innerHeight) + 'px';
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 2500);
+}
+
+// ══════════════════════════════════════════════════
 // ENEMIES
 // ══════════════════════════════════════════════════
 function updateEnemies(dt) {
   for (const e of enemies) {
     if (e.alive === false) continue;
-    const s = e.status || (e.status = {
-      freeze: 0,
-      stun: 0,
-      slowMult: 1,
-      slowTime: 0,
-      burnDps: 0,
-      burnTime: 0,
-      burnTick: 0.15,
-      burnAcc: 0,
-    });
+    const s = e.status || (e.status = createDefaultStatus());
     const frozen = s.freeze > 0;
     const stunned = s.stun > 0;
     const slowScale = s.slowTime > 0 ? THREE.MathUtils.clamp(s.slowMult ?? 1, 0, 1) : 1;
@@ -857,7 +897,7 @@ function updateEnemies(dt) {
     }
 
     if (!stunned) {
-      updateEnemyAI(e, player, enemies, dt, slowScale);
+      updateEnemyAI(e, player, enemies, dt, slowScale * (e.speedBuff || 1));
     }
 
     // Gravity pulls enemies down when airborne
@@ -893,13 +933,23 @@ function updateEnemies(dt) {
     e.mesh.rotation.y = e.yaw;
     animateHumanoid(e.mesh, dt, Math.hypot(e.vel.x, e.vel.z));
 
+    // Taunt on first aggro
+    if (dist < 15 && e.identity && !e.identity.hasTaunted) {
+      e.identity.hasTaunted = true;
+      showEnemyTaunt(e);
+    }
+
     // Melee attack
-    if (!frozen && !stunned && dist < 2.5) {
+    const attackRange = e.typeConfig?.attackRange || 2.5;
+    if (!frozen && !stunned && dist < attackRange) {
       e.attackCooldown = (e.attackCooldown ?? 0) - dt;
       if (e.attackCooldown <= 0) {
-        e.attackCooldown = 1.2;
+        e.attackCooldown = e.typeConfig?.attackCooldown || 1.2;
+        const dmg = e.typeConfig?.damage || 10;
         if (player.invulnTimer <= 0 && player.hp > 0) {
-          player.hp -= 10;
+          player.hp -= dmg;
+          MatchMemory.recordPlayerHit(dmg, player.hp);
+          playPlayerHit();
           player.invulnTimer = 0.3;
           triggerFlash(0.2);
           setShake(0.4, 0.2);
@@ -916,9 +966,13 @@ function updateEnemies(dt) {
 // ══════════════════════════════════════════════════
 // ENEMY OBJECT POOLING
 // ══════════════════════════════════════════════════
-export function respawnEnemy(x, z, hp = 100) {
+export function respawnEnemy(x, z, hp = 100, typeConfig = null) {
   const dead = enemies.find(e => e.hp <= 0);
   if (!dead) return null;
+  if (typeConfig) {
+    dead.typeConfig = typeConfig;
+    dead.typeName = typeConfig.name;
+  }
   dead.hp = hp;
   dead.maxHp = hp;
   dead.alive = true;
@@ -929,14 +983,7 @@ export function respawnEnemy(x, z, hp = 100) {
   dead.mesh.visible = true;
   dead.mesh.position.copy(dead.pos);
   if (dead.status) {
-    dead.status.freeze = 0;
-    dead.status.stun = 0;
-    dead.status.slowMult = 1;
-    dead.status.slowTime = 0;
-    dead.status.burnDps = 0;
-    dead.status.burnTime = 0;
-    dead.status.burnTick = 0.15;
-    dead.status.burnAcc = 0;
+    clearStatus(dead.status);
   }
   dead.bodyMesh.material.emissive.set(0x000000);
   dead.bodyMesh.material.emissiveIntensity = 0;

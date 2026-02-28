@@ -2,9 +2,8 @@ import { setWeapon } from './sandbox.js';
 import { CODER_PROMPT } from './prompt.js';
 import { playForgeOpen, playForgeComplete } from './audio.js';
 import { validateWeaponCode } from './weaponValidator.js';
-
-const GEMINI_CHAT_COMPLETIONS_PATH = '/gemini/chat/completions';
-const GEMINI_MODELS = ['gemini-3-pro-preview', 'gemini-3-flash-preview', 'gemini-2.5-flash'];
+import { MatchMemory } from './matchMemory.js';
+import { geminiText } from './geminiService.js';
 
 let forgeOpen = false;
 let onOpenCb = null;
@@ -43,15 +42,23 @@ export function initForge(callbacks = {}) {
     errEl.textContent = '';
 
     try {
-      status.innerHTML = '<span class="forge-loading">Forging weapon<span class="dots"></span></span>';
+      status.textContent = 'Forging weapon...';
+      status.className = 'forge-loading';
       const coderInput = `## PLAYER WEAPON REQUEST:\n"${prompt}"\n\nImplement a weapon that matches this request. Infer missing details if needed. Output ONLY the function body code.`;
       const generationStart = performance.now();
-      const { code, model } = await callLLM(CODER_PROMPT, coderInput);
+      const code = await geminiText({
+        systemPrompt: CODER_PROMPT,
+        userMessage: coderInput,
+        temperature: 0.7,
+        maxTokens: 4000,
+      });
+      if (!code) throw new Error('Gemini returned an empty response.');
       const generationMs = Math.round(performance.now() - generationStart);
 
-      status.innerHTML = '<span class="forge-loading">Compiling<span class="dots"></span></span>';
+      status.textContent = 'Compiling...';
+      status.className = 'forge-loading';
       const cleanCode = code.replace(/^```(?:javascript|js)?\n?/i, '').replace(/\n?```$/i, '').trim();
-      console.log('Gemini model used:', model, `| generation time: ${generationMs} ms`);
+      console.log(`Weapon generation time: ${generationMs} ms`);
       console.log('Generated weapon code:\n', cleanCode);
 
       const validation = validateWeaponCode(cleanCode);
@@ -59,19 +66,23 @@ export function initForge(callbacks = {}) {
         const msg = 'Weapon code blocked:\n• ' + validation.errors.join('\n• ');
         console.warn(msg);
         errEl.textContent = msg;
-        status.innerHTML = '<span class="forge-fail">Weapon rejected — unsafe code detected</span>';
+        status.textContent = 'Weapon rejected — unsafe code detected';
+        status.className = 'forge-fail';
         return;
       }
 
       const fn = new Function('ctx', cleanCode);
       setWeapon(fn, prompt, cleanCode);
-      status.innerHTML = '<span class="forge-success">⚡ Weapon ready!</span>';
+      MatchMemory.recordWeaponForge(prompt);
+      status.textContent = 'Weapon ready!';
+      status.className = 'forge-success';
       playForgeComplete();
       setTimeout(closeForge, 700);
     } catch (err) {
       console.error('Forge error:', err);
       errEl.textContent = err.message;
-      status.innerHTML = '<span class="forge-fail">Generation failed — try again</span>';
+      status.textContent = 'Generation failed — try again';
+      status.className = 'forge-fail';
     } finally {
       btn.disabled = false;
     }
@@ -94,64 +105,3 @@ export function closeForge() {
   onCloseCb?.();
 }
 
-function extractMessageText(data) {
-  const content = data?.choices?.[0]?.message?.content;
-  if (typeof content === 'string') return content.trim();
-  if (Array.isArray(content)) {
-    return content
-      .map((part) => {
-        if (typeof part === 'string') return part;
-        if (typeof part?.text === 'string') return part.text;
-        return '';
-      })
-      .join('')
-      .trim();
-  }
-  throw new Error('Gemini returned an empty response.');
-}
-
-async function requestCompletion(systemPrompt, userMessage, model) {
-  const res = await fetch(GEMINI_CHAT_COMPLETIONS_PATH, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model,
-      temperature: 0.7,
-      max_tokens: 4000,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userMessage },
-      ],
-    }),
-  });
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    const message = err.error?.message || `Gemini API error ${res.status}`;
-    const error = new Error(message);
-    error.status = res.status;
-    throw error;
-  }
-
-  const data = await res.json();
-  return {
-    code: extractMessageText(data),
-    model,
-  };
-}
-
-async function callLLM(systemPrompt, userMessage, models = GEMINI_MODELS) {
-  let lastError = null;
-  for (const model of models) {
-    try {
-      return await requestCompletion(systemPrompt, userMessage, model);
-    } catch (err) {
-      lastError = err;
-      if (err?.status === 401 || err?.status === 403) break;
-    }
-  }
-
-  throw lastError || new Error('Gemini request failed.');
-}

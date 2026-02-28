@@ -4,15 +4,12 @@ import { ParticlePool } from './particles.js';
 import { createWeaponSdk } from './weaponSdk/index.js';
 import { createSafeContext } from './weaponValidator.js';
 import { saveWeapons, loadWeapons } from './weaponStorage.js';
+import { validateWeaponCode } from './weaponValidator.js';
 import { GameState } from './gameState.js';
 import { updateScore, updateKills, showDamageNumber } from './hud.js';
 import { playHit, playEnemyDeath } from './audio.js';
-
-GameState.on('wave_clear', ({ wave }) => {
-  const bonus = wave * 100;
-  GameState.addScore(bonus);
-  updateScore(GameState.score);
-});
+import { MatchMemory } from './matchMemory.js';
+import { createDefaultStatus, clearStatus, ensureStatus } from './statusEffects.js';
 
 GameState.on('restart', () => {
   updateScore(0);
@@ -41,37 +38,23 @@ const weaponSlots = [
 let activeSlot = 0;
 export let shakeAmt = 0;
 export let shakeTime = 0;
+let _cachedCtx = null;
+let _ctxFrame = -1;
+let _frameCounter = 0;
+let _cachedEnemyWraps = null;
 const PLAYER_TORSO_ORIGIN_Y = 0.95;
+const _torsoOrigin = new THREE.Vector3();
+const _sbShootOrigin = new THREE.Vector3();
+const _facingDir = new THREE.Vector3();
 
 // References set by main.js
 let _scene, _camera, _enemies, _player, _playerYaw;
 let _getAimPoint = null;
 let _effects = {};
 let _particlePool = null;
-let _compatThree = null;
+// _compatThree removed — use THREE directly
 
-function getCompatThree() {
-  if (_compatThree) return _compatThree;
-
-  const compat = { ...THREE };
-  if (typeof compat.CapsuleGeometry !== 'function') {
-    // Three r128 may not expose CapsuleGeometry; provide a safe fallback.
-    compat.CapsuleGeometry = class CapsuleGeometry extends THREE.CylinderGeometry {
-      constructor(radius = 0.25, length = 1, capSegments = 8, radialSegments = 8) {
-        const r = Math.max(0.01, Number.isFinite(radius) ? radius : 0.25);
-        const body = Math.max(0.001, Number.isFinite(length) ? length : 1);
-        const radial = Math.max(3, Math.floor(Number.isFinite(radialSegments) ? radialSegments : 8));
-        const radialCap = Math.max(1, Math.floor(Number.isFinite(capSegments) ? capSegments : 8));
-
-        // Approximation: cylinder height includes hemispherical cap space.
-        super(r, r, body + r * 2, radial, radialCap, false);
-      }
-    };
-  }
-
-  _compatThree = compat;
-  return _compatThree;
-}
+// THREE is used directly — no polyfill needed for modern Three.js
 
 export function initSandbox(scene, camera, player, enemies, getYaw, getAimPoint, effects = {}) {
   _scene = scene;
@@ -93,7 +76,7 @@ function getPlayerAimPoint() {
 }
 
 function getPlayerFacingDirection(yaw) {
-  return new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw));
+  return _facingDir.set(-Math.sin(yaw), 0, -Math.cos(yaw));
 }
 
 export function setShake(amt, time) {
@@ -106,13 +89,13 @@ export function getShake() {
 }
 
 function getPlayerTorsoOrigin() {
-  return _player.pos.clone().add(new THREE.Vector3(0, PLAYER_TORSO_ORIGIN_Y, 0));
+  return _torsoOrigin.copy(_player.pos).setY(_player.pos.y + PLAYER_TORSO_ORIGIN_Y);
 }
 
 function getPlayerShootOrigin() {
   const muzzleTip = _player?.mesh?.userData?.rig?.muzzleTip;
   if (muzzleTip && typeof muzzleTip.getWorldPosition === 'function') {
-    return muzzleTip.getWorldPosition(new THREE.Vector3());
+    return muzzleTip.getWorldPosition(_sbShootOrigin);
   }
   return getPlayerTorsoOrigin();
 }
@@ -251,49 +234,36 @@ export function updateSandboxTimers(dt) {
   }
 }
 
-function ensureEnemyStatus(e) {
-  if (!e.status) {
-    e.status = {};
-  }
-  if (typeof e.status.freeze !== 'number') e.status.freeze = 0;
-  if (typeof e.status.stun !== 'number') e.status.stun = 0;
-  if (typeof e.status.slowMult !== 'number') e.status.slowMult = 1;
-  if (typeof e.status.slowTime !== 'number') e.status.slowTime = 0;
-  if (typeof e.status.burnDps !== 'number') e.status.burnDps = 0;
-  if (typeof e.status.burnTime !== 'number') e.status.burnTime = 0;
-  if (typeof e.status.burnTick !== 'number') e.status.burnTick = 0.15;
-  if (typeof e.status.burnAcc !== 'number') e.status.burnAcc = 0;
-  return e.status;
-}
-
-function clearEnemyStatuses(e) {
-  const s = ensureEnemyStatus(e);
-  s.freeze = 0;
-  s.stun = 0;
-  s.slowMult = 1;
-  s.slowTime = 0;
-  s.burnDps = 0;
-  s.burnTime = 0;
-  s.burnTick = 0.15;
-  s.burnAcc = 0;
-  return s;
-}
+// Status effect helpers now imported from statusEffects.js
+const ensureEnemyStatus = ensureStatus;
+const clearEnemyStatuses = (e) => clearStatus(ensureStatus(e));
 
 function flashEnemyHit(e, opts = {}) {
   const { color = 0xffffff, intensity = 1.9, durationMs = 80 } = opts;
   e.bodyMesh.material.emissive.set(color);
   e.bodyMesh.material.emissiveIntensity = intensity;
-  setTimeout(() => {
-    if (e.hp > 0) {
-      e.bodyMesh.material.emissive.set(0);
-      e.bodyMesh.material.emissiveIntensity = 0;
+  const durationSec = durationMs / 1000;
+  const t0 = elapsed;
+  cbs.push((dt, el) => {
+    if (el - t0 >= durationSec) {
+      if (e.hp > 0) {
+        e.bodyMesh.material.emissive.set(0);
+        e.bodyMesh.material.emissiveIntensity = 0;
+      }
+      return false;
     }
-  }, durationMs);
+  });
 }
 
 function damageEnemy(e, amt, flashOpts = {}) {
   if (!Number.isFinite(amt) || amt <= 0) return;
   if (e.alive === false) return;
+  // Enemy resistance check (from identity or arena god modifier)
+  const weaponLower = getActiveWeaponName().toLowerCase();
+  const resistance = e.identity?.resistance || e.resistType;
+  if (resistance && weaponLower.includes(resistance)) {
+    amt *= 0.5;
+  }
   e.hp -= amt;
   playHit();
   flashEnemyHit(e, flashOpts);
@@ -308,7 +278,7 @@ function damageEnemy(e, amt, flashOpts = {}) {
 
   if (e.hp <= 0) {
     playEnemyDeath();
-    GameState.addScore(100);
+    GameState.addScore(e.typeConfig?.scoreValue || 100);
     updateKills(GameState.kills);
     updateScore(GameState.score);
     deathEffect(e.pos.clone());
@@ -349,6 +319,37 @@ function respawn(e) {
   e.mesh.visible = false;
   e.vel.set(0, 0, 0);
   GameState.addKill();
+  MatchMemory.recordEnemyKill(e);
+
+  // Show last words
+  if (e.identity?.lastWords && _camera) {
+    const screenPos = e.pos.clone().add(new THREE.Vector3(0, 2, 0)).project(_camera);
+    const lw = document.createElement('div');
+    lw.className = 'enemy-last-words';
+    lw.textContent = `"${e.identity.lastWords}"`;
+    lw.style.left = ((screenPos.x * 0.5 + 0.5) * window.innerWidth) + 'px';
+    lw.style.top = ((-screenPos.y * 0.5 + 0.5) * window.innerHeight) + 'px';
+    document.body.appendChild(lw);
+    setTimeout(() => lw.remove(), 2500);
+  }
+
+  // Rage buff on nearby allies
+  if (e.identity) {
+    for (const other of _enemies) {
+      if (other === e || !other.alive) continue;
+      const d = Math.hypot(other.pos.x - e.pos.x, other.pos.z - e.pos.z);
+      if (d < 12) {
+        other.bodyMesh.material.emissive.set(0xff0000);
+        other.bodyMesh.material.emissiveIntensity = 2.5;
+        setTimeout(() => {
+          if (other.alive) {
+            other.bodyMesh.material.emissive.set(0x000000);
+            other.bodyMesh.material.emissiveIntensity = 0;
+          }
+        }, 300);
+      }
+    }
+  }
 }
 
 // ── Death effect ──
@@ -386,7 +387,6 @@ function deathEffect(pos) {
 
 // ── Build the context passed to AI weapon code ──
 export function buildCtx() {
-  const compatTHREE = getCompatThree();
   const yaw = _playerYaw();
   const aimPoint = getPlayerAimPoint();
   const toVec3 = (v) => {
@@ -449,7 +449,7 @@ export function buildCtx() {
   });
 
   const ctx = {
-    THREE: compatTHREE, scene: _scene,
+    THREE: THREE, scene: _scene,
 
     player: {
       getPosition: () => getPlayerShootOrigin(),
@@ -465,7 +465,10 @@ export function buildCtx() {
       getQuaternion: () => new THREE.Quaternion().setFromEuler(new THREE.Euler(0, yaw, 0)),
     },
 
-    getEnemies: () => _enemies.map(wrapEnemy),
+    getEnemies: () => {
+      if (!_cachedEnemyWraps) _cachedEnemyWraps = _enemies.map(wrapEnemy);
+      return _cachedEnemyWraps;
+    },
 
     spawn: (mesh, opt = {}) => {
       const { position = new THREE.Vector3(), velocity = new THREE.Vector3(), angularVelocity = null,
@@ -637,7 +640,7 @@ export function buildCtx() {
   };
 
   const sdk = createWeaponSdk({
-    THREE: compatTHREE,
+    THREE: THREE,
     scene: _scene,
     toVec3,
     getEnemies: () => ctx.getEnemies(),
@@ -661,12 +664,19 @@ export function buildCtx() {
   return ctx;
 }
 
+// ── Frame tick (call once per frame from game loop) ──
+export function tickFrame() { _frameCounter++; _cachedEnemyWraps = null; }
+
 // ── Fire weapon ──
 export function fire() {
   if (!fireFn) return;
   if (elapsed - lastFire < 0.05) return;
   lastFire = elapsed;
-  try { fireFn(createSafeContext(buildCtx())); } catch (e) { console.error('Weapon error:', e); }
+  if (_ctxFrame !== _frameCounter) {
+    _cachedCtx = createSafeContext(buildCtx());
+    _ctxFrame = _frameCounter;
+  }
+  try { fireFn(_cachedCtx); } catch (e) { console.error('Weapon error:', e); }
 }
 
 // ── Set current weapon ──
@@ -697,6 +707,7 @@ export function getNextEmptySlot() {
 
 export function getActiveSlot() { return activeSlot; }
 export function getWeaponSlots() { return weaponSlots; }
+export function getActiveWeaponName() { return weaponSlots[activeSlot]?.name || ''; }
 
 function updateWeaponSlotsHud() {
   document.querySelectorAll('.weapon-slot').forEach((el, i) => {
@@ -718,6 +729,11 @@ export function loadSavedWeapons() {
       const idx = typeof entry.slotIndex === 'number' ? entry.slotIndex : 0;
       if (idx < 0 || idx >= weaponSlots.length) continue;
       try {
+        const validation = validateWeaponCode(entry.code);
+        if (!validation.valid) {
+          console.warn(`Saved weapon in slot ${idx} failed validation:`, validation.errors);
+          continue;
+        }
         const fn = new Function('ctx', entry.code);
         weaponSlots[idx] = { fn, name: entry.prompt || 'Weapon', code: entry.code };
       } catch (err) {

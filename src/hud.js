@@ -48,24 +48,64 @@ export function showMessage(text, duration = 2000) {
   setTimeout(() => el.classList.remove('visible'), duration);
 }
 
+// DOM element pool for damage numbers
+const DMG_POOL_SIZE = 20;
+const _dmgPool = [];
+let _dmgCursor = 0;
+
+function ensureDmgPool() {
+  if (_dmgPool.length > 0) return;
+  for (let i = 0; i < DMG_POOL_SIZE; i++) {
+    const el = document.createElement('div');
+    el.className = 'damage-number';
+    el.style.display = 'none';
+    document.body.appendChild(el);
+    _dmgPool.push(el);
+  }
+}
+
 export function showDamageNumber(screenX, screenY, damage, color = '#fff') {
-  const el = document.createElement('div');
-  el.className = 'damage-number';
+  ensureDmgPool();
+  const el = _dmgPool[_dmgCursor];
+  _dmgCursor = (_dmgCursor + 1) % DMG_POOL_SIZE;
   el.textContent = Math.round(damage);
   el.style.left = screenX + 'px';
   el.style.top = screenY + 'px';
   el.style.color = color;
-  document.body.appendChild(el);
-  // Remove after animation completes
-  setTimeout(() => el.remove(), 800);
+  el.style.display = '';
+  // Reset animation
+  el.style.animation = 'none';
+  void el.offsetWidth;
+  el.style.animation = '';
+  setTimeout(() => { el.style.display = 'none'; }, 800);
 }
 
 export function updateLevelDisplay(level, xp, xpToNext, title) {
   const el = document.getElementById('player-level');
   if (!el) return;
-  const titleHtml = title ? `<span class="player-title">${title}</span>` : '';
+  el.textContent = '';
   const pct = xpToNext > 0 ? Math.round((xp / xpToNext) * 100) : 0;
-  el.innerHTML = `${titleHtml}<span class="level-label">LV ${level}</span><div class="xp-bar"><div class="xp-fill" style="width:${pct}%"></div></div><span class="xp-text">${xp}/${xpToNext} XP</span>`;
+  if (title) {
+    const titleSpan = document.createElement('span');
+    titleSpan.className = 'player-title';
+    titleSpan.textContent = title;
+    el.appendChild(titleSpan);
+  }
+  const levelSpan = document.createElement('span');
+  levelSpan.className = 'level-label';
+  levelSpan.textContent = `LV ${level}`;
+  el.appendChild(levelSpan);
+  const xpBar = document.createElement('div');
+  xpBar.className = 'xp-bar';
+  const xpFill = document.createElement('div');
+  xpFill.className = 'xp-fill';
+  xpFill.style.width = `${pct}%`;
+  xpBar.appendChild(xpFill);
+  el.appendChild(xpBar);
+  const xpText = document.createElement('span');
+  xpText.className = 'xp-text';
+  xpText.textContent = `${xp}/${xpToNext} XP`;
+  el.appendChild(xpText);
 }
 
 // Helpers

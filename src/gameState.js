@@ -5,8 +5,6 @@ const initialState = {
   wave: 0,
   score: 0,
   kills: 0,
-  playerHp: 100,
-  playerMaxHp: 100,
   isPaused: false,
   timeScale: 1,
 };
@@ -60,19 +58,6 @@ export const GameState = {
   addKill() {
     this.kills += 1;
     this.emit('enemy_killed_count', { kills: this.kills });
-  },
-
-  damagePlayer(amt) {
-    this.playerHp = Math.max(0, this.playerHp - amt);
-    this.emit('player_hit', { damage: amt, hpRemaining: this.playerHp });
-    if (this.playerHp <= 0) {
-      this.emit('player_death', {});
-      this.gameOver();
-    }
-  },
-
-  healPlayer(amt) {
-    this.playerHp = Math.min(this.playerMaxHp, this.playerHp + amt);
   },
 
   restart() {

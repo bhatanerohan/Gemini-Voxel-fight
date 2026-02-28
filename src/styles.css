@@ -51,16 +51,63 @@ canvas { display: block; cursor: crosshair; }
 
 /* Health bar (CSS2D overlay) */
 .health-bar-container {
-  width: 40px; height: 5px; background: rgba(0,0,0,0.6); border-radius: 3px;
-  overflow: hidden; pointer-events: none; border: 1px solid rgba(255,255,255,0.1);
+  width: 40px; background: rgba(0,0,0,0.6); border-radius: 3px;
+  overflow: visible; pointer-events: none; border: 1px solid rgba(255,255,255,0.1);
 }
 .health-bar-fill {
-  height: 100%; background: #ff3344; border-radius: 2px;
+  height: 5px; background: #ff3344; border-radius: 2px;
   transition: width 0.15s ease-out, background-color 0.15s;
 }
 .health-bar-fill.healthy { background: #44ff66; }
 .health-bar-fill.mid { background: #ffaa22; }
 .health-bar-fill.low { background: #ff3344; }
+
+/* Enemy Identity */
+.enemy-name-label {
+  font-family: 'Courier New', monospace;
+  font-size: 9px;
+  color: #ff8888;
+  text-align: center;
+  text-shadow: 0 0 4px rgba(255, 0, 0, 0.5);
+  white-space: nowrap;
+  margin-bottom: 2px;
+  opacity: 0.9;
+}
+
+.enemy-taunt {
+  position: fixed;
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+  color: #ff4444;
+  text-shadow: 0 0 6px rgba(255, 0, 0, 0.4);
+  pointer-events: none;
+  z-index: 40;
+  transform: translateX(-50%);
+  animation: taunt-float 2.5s ease-out forwards;
+}
+
+.enemy-last-words {
+  position: fixed;
+  font-family: 'Courier New', monospace;
+  font-size: 10px;
+  font-style: italic;
+  color: #aaaaaa;
+  text-shadow: 0 0 4px rgba(170, 170, 170, 0.3);
+  pointer-events: none;
+  z-index: 40;
+  transform: translateX(-50%);
+  animation: last-words-fade 2.5s ease-out forwards;
+}
+
+@keyframes taunt-float {
+  0% { opacity: 1; transform: translateX(-50%) translateY(0); }
+  100% { opacity: 0; transform: translateX(-50%) translateY(-40px); }
+}
+
+@keyframes last-words-fade {
+  0% { opacity: 0.8; transform: translateX(-50%) translateY(0); }
+  100% { opacity: 0; transform: translateX(-50%) translateY(-50px); }
+}
 
 /* Forge Overlay */
 #forge-overlay {
@@ -263,3 +310,111 @@ canvas { display: block; cursor: crosshair; }
 #forge-overlay.open { backdrop-filter: blur(4px); }
 #forge-box { animation: forgeBoxIn 0.3s ease-out; }
 @keyframes forgeBoxIn { 0% { transform: scale(0.9) translateY(20px); opacity: 0; } 100% { transform: scale(1) translateY(0); opacity: 1; } }
+
+/* ── Arena God Dialogue ── */
+#arena-god {
+  position: fixed;
+  top: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: 600px;
+  padding: 12px 24px;
+  background: rgba(0, 0, 0, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  font-family: 'Courier New', monospace;
+  font-size: 14px;
+  color: #ccc;
+  text-align: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.4s ease;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+#arena-god.visible { opacity: 1; }
+
+/* Tone variants */
+#arena-god.amused { border-color: rgba(100, 200, 255, 0.4); color: #aaddff; }
+#arena-god.angry { border-color: rgba(255, 80, 80, 0.4); color: #ff8888; }
+#arena-god.impressed { border-color: rgba(255, 215, 0, 0.4); color: #ffd700; }
+#arena-god.bored { border-color: rgba(128, 128, 128, 0.4); color: #888; }
+#arena-god.contemptuous { border-color: rgba(180, 100, 255, 0.4); color: #c488ff; }
+#arena-god.neutral { border-color: rgba(255, 255, 255, 0.2); color: #ccc; }
+
+#god-portrait {
+  font-size: 22px;
+  flex-shrink: 0;
+  filter: drop-shadow(0 0 6px currentColor);
+}
+
+#god-portrait::before {
+  content: '\25C9'; /* Unicode fisheye / eye-like symbol */
+}
+
+#god-text {
+  min-height: 18px;
+  letter-spacing: 0.5px;
+  text-align: left;
+  line-height: 1.4;
+}
+
+/* ── War Chronicle ── */
+#chronicle-container {
+  display: none;
+  max-width: 500px;
+  margin: 20px auto 0;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(255, 215, 0, 0.2);
+  border-radius: 8px;
+  text-align: left;
+}
+
+#chronicle-container.visible { display: block; }
+
+#chronicle-title {
+  font-family: 'Georgia', serif;
+  font-size: 16px;
+  color: #ffd700;
+  text-align: center;
+  margin: 0 0 12px 0;
+}
+
+#chronicle-text {
+  font-family: 'Georgia', serif;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #cccccc;
+  min-height: 60px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+#chronicle-moment {
+  font-style: italic;
+  color: #ffd700;
+  font-size: 12px;
+  margin: 12px 0 0;
+  text-align: center;
+}
+
+#chronicle-share-btn {
+  display: block;
+  margin: 12px auto 0;
+  padding: 6px 16px;
+  background: transparent;
+  border: 1px solid rgba(255, 215, 0, 0.3);
+  color: #ffd700;
+  font-size: 11px;
+  cursor: pointer;
+  border-radius: 4px;
+  font-family: inherit;
+}
+
+#chronicle-share-btn:hover {
+  background: rgba(255, 215, 0, 0.1);
+}
