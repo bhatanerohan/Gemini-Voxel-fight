@@ -21,6 +21,7 @@ import { initArenaGod } from './arenaGod.js';
 import { saveSessionSummary } from './sessionMemory.js';
 import { generateChronicle, displayChronicle, hideChronicle } from './warChronicle.js';
 import { initMutations, updateMutations } from './arenaMutations.js';
+<<<<<<< Updated upstream
 import { initThemeManager, applyThemeInstant, PRESETS } from './themeManager.js';
 import { initThemeUI } from './themeUI.js';
 import { applyAvatarConfig, updateAvatarEffects, getAvatarConcept, resetAvatar, setAvatarParticlePool } from './avatarBuilder.js';
@@ -31,6 +32,9 @@ import { getDamageMutation, preGenerateMutations, clearMutationCache } from './l
 import { applyDamageMutation, updateDamageEffects, checkDamageThreshold, clearDamageMutations, setDamageParticlePool } from './damageMutations.js';
 import { generateArenaConfig } from './llama/arenaGenAgent.js';
 import { buildArenaFromConfig, updateArenaEffects, setArenaParticlePool } from './arenaBuilder.js';
+=======
+import { geminiJSON } from './geminiService.js';
+>>>>>>> Stashed changes
 
 // ══════════════════════════════════════════════════
 // STATE
@@ -115,6 +119,27 @@ const PLAYER_SKIN_PRESETS = [
   { id: 'jade-sentinel', name: 'Jade Sentinel', suitColor: 0x1e7f62, accentColor: 0x93ffd1, skinColor: 0xe3b58f, visorColor: 0x0d2420, emissive: 0x0e4737, emissiveIntensity: 0.09 },
   { id: 'void-striker', name: 'Void Striker', suitColor: 0x3a2d7a, accentColor: 0xd0b6ff, skinColor: 0xd8ae93, visorColor: 0x130d2a, emissive: 0x2b1d5a, emissiveIntensity: 0.1 },
 ];
+const AVATAR_SKIN_SYSTEM_PROMPT = `You design one voxel-combat avatar skin palette from a short user prompt.
+
+Return ONLY JSON with this exact schema:
+{
+  "name": "short skin name",
+  "suitColor": "#RRGGBB",
+  "accentColor": "#RRGGBB",
+  "skinColor": "#RRGGBB",
+  "visorColor": "#RRGGBB",
+  "emissive": "#RRGGBB",
+  "emissiveIntensity": 0.00
+}
+
+Rules:
+- Colors must be valid 6-digit hex strings.
+- emissiveIntensity must be between 0.02 and 0.18.
+- Keep high contrast between suit and accent.
+- Keep skinColor natural-looking for a humanoid face.
+- Be faithful to the user prompt theme and vibe.
+- No markdown, no code fences, no explanation, JSON only.`;
+
 const DEFAULT_PLAYER_SKIN_PRESET_ID = 'neon-ranger';
 let playerSkinState = null;
 let _skinPresetSelect = null;
@@ -122,7 +147,10 @@ let _skinSuitInput = null;
 let _skinAccentInput = null;
 let _skinToneInput = null;
 let _skinVisorInput = null;
+let _skinPromptInput = null;
+let _skinApplyButton = null;
 let _skinNameLabel = null;
+let _skinPromptAbortController = null;
 
 function getSkinPresetById(id) {
   return PLAYER_SKIN_PRESETS.find(p => p.id === id) || PLAYER_SKIN_PRESETS[0];
@@ -139,8 +167,89 @@ function toInputHex(value) {
 
 function fromInputHex(value, fallback = 0xffffff) {
   if (typeof value !== 'string') return fallback;
-  const parsed = Number.parseInt(value.replace('#', ''), 16);
+  const parsed = Number.parseInt(value.replace('#', '').replace(/^0x/i, ''), 16);
   return clampHexColor(parsed, fallback);
+}
+
+function parseColorValue(value, fallback = 0xffffff) {
+  if (typeof value === 'number') return clampHexColor(value, fallback);
+  if (typeof value === 'string') return fromInputHex(value, fallback);
+  return fallback;
+}
+
+function sanitizePromptText(value) {
+  if (typeof value !== 'string') return '';
+  return value.trim().slice(0, 80);
+}
+
+function hashString32(value) {
+  let hash = 2166136261;
+  for (let i = 0; i < value.length; i++) {
+    hash ^= value.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+function buildGeneratedPromptSkin(promptText) {
+  const lower = promptText.toLowerCase();
+  const seed = hashString32(lower);
+  const hueBase = (seed % 360) / 360;
+  const suitLight = 0.2 + ((seed >>> 10) % 16) / 100;
+  const suit = new THREE.Color().setHSL(hueBase, 0.62, suitLight);
+  const accent = new THREE.Color().setHSL((hueBase + 0.12) % 1, 0.72, Math.min(0.72, suitLight + 0.26));
+  const visor = new THREE.Color().setHSL(hueBase, 0.3, Math.max(0.07, suitLight - 0.12));
+  const emissive = new THREE.Color().setHSL((hueBase + 0.04) % 1, 0.75, 0.15);
+  const skinPalette = [0xf7d7c3, 0xefc5a3, 0xd9ae87, 0xbe8f67, 0x8c6647];
+  const skin = skinPalette[(seed >>> 4) % skinPalette.length];
+  return {
+    presetId: 'custom',
+    presetName: `Prompt: ${promptText}`,
+    promptText,
+    suitColor: suit.getHex(),
+    accentColor: accent.getHex(),
+    skinColor: skin,
+    visorColor: visor.getHex(),
+    emissive: emissive.getHex(),
+    emissiveIntensity: 0.09,
+  };
+}
+
+function buildSkinFromGeminiResponse(response, promptText) {
+  const basePreset = getSkinPresetById(DEFAULT_PLAYER_SKIN_PRESET_ID);
+  const aiName = typeof response?.name === 'string' && response.name.trim() ? response.name.trim().slice(0, 30) : promptText;
+  return {
+    presetId: 'custom',
+    presetName: `AI: ${aiName}`,
+    promptText,
+    suitColor: parseColorValue(response?.suitColor, basePreset.suitColor),
+    accentColor: parseColorValue(response?.accentColor, basePreset.accentColor),
+    skinColor: parseColorValue(response?.skinColor, basePreset.skinColor),
+    visorColor: parseColorValue(response?.visorColor, basePreset.visorColor),
+    emissive: parseColorValue(response?.emissive, basePreset.emissive),
+    emissiveIntensity: Number.isFinite(response?.emissiveIntensity)
+      ? THREE.MathUtils.clamp(response.emissiveIntensity, 0, 1)
+      : basePreset.emissiveIntensity,
+  };
+}
+
+async function generateSkinFromPrompt(rawPrompt, signal) {
+  const promptText = sanitizePromptText(rawPrompt);
+  if (!promptText) return null;
+
+  const aiResponse = await geminiJSON({
+    systemPrompt: AVATAR_SKIN_SYSTEM_PROMPT,
+    userMessage: `Create a skin for this avatar prompt: "${promptText}"`,
+    temperature: 0.65,
+    maxTokens: 320,
+    signal,
+  });
+
+  if (aiResponse) {
+    return buildSkinFromGeminiResponse(aiResponse, promptText);
+  }
+
+  return buildGeneratedPromptSkin(promptText);
 }
 
 function buildPlayerSkinConfig(config = {}) {
@@ -148,11 +257,12 @@ function buildPlayerSkinConfig(config = {}) {
   return {
     presetId: typeof config.presetId === 'string' ? config.presetId : preset.id,
     presetName: typeof config.presetName === 'string' ? config.presetName : preset.name,
-    suitColor: clampHexColor(config.suitColor ?? preset.suitColor, preset.suitColor),
-    accentColor: clampHexColor(config.accentColor ?? preset.accentColor, preset.accentColor),
-    skinColor: clampHexColor(config.skinColor ?? preset.skinColor, preset.skinColor),
-    visorColor: clampHexColor(config.visorColor ?? preset.visorColor, preset.visorColor),
-    emissive: clampHexColor(config.emissive ?? preset.emissive, preset.emissive),
+    promptText: sanitizePromptText(config.promptText),
+    suitColor: parseColorValue(config.suitColor ?? preset.suitColor, preset.suitColor),
+    accentColor: parseColorValue(config.accentColor ?? preset.accentColor, preset.accentColor),
+    skinColor: parseColorValue(config.skinColor ?? preset.skinColor, preset.skinColor),
+    visorColor: parseColorValue(config.visorColor ?? preset.visorColor, preset.visorColor),
+    emissive: parseColorValue(config.emissive ?? preset.emissive, preset.emissive),
     emissiveIntensity: Number.isFinite(config.emissiveIntensity) ? THREE.MathUtils.clamp(config.emissiveIntensity, 0, 1) : preset.emissiveIntensity,
   };
 }
@@ -202,6 +312,7 @@ function syncSkinUi() {
   if (_skinAccentInput) _skinAccentInput.value = toInputHex(playerSkinState.accentColor);
   if (_skinToneInput) _skinToneInput.value = toInputHex(playerSkinState.skinColor);
   if (_skinVisorInput) _skinVisorInput.value = toInputHex(playerSkinState.visorColor);
+  if (_skinPromptInput) _skinPromptInput.value = playerSkinState.promptText || '';
   if (_skinNameLabel) _skinNameLabel.textContent = `Current: ${playerSkinState.presetName}`;
 }
 
@@ -222,13 +333,22 @@ function randomPlayerColor() {
   return Math.floor(Math.random() * 0xffffff);
 }
 
+function setSkinPromptPending(isPending) {
+  if (_skinApplyButton) {
+    _skinApplyButton.disabled = isPending;
+    _skinApplyButton.textContent = isPending ? 'Generating...' : 'Apply';
+  }
+}
+
 function initSkinUi() {
   _skinPresetSelect = document.getElementById('player-skin-preset');
   _skinSuitInput = document.getElementById('player-skin-suit');
   _skinAccentInput = document.getElementById('player-skin-accent');
   _skinToneInput = document.getElementById('player-skin-tone');
   _skinVisorInput = document.getElementById('player-skin-visor');
+  _skinPromptInput = document.getElementById('player-skin-prompt');
   _skinNameLabel = document.getElementById('player-skin-name');
+  _skinApplyButton = document.getElementById('player-skin-apply');
   const randomButton = document.getElementById('player-skin-random');
 
   if (!_skinPresetSelect || !_skinSuitInput || !_skinAccentInput || !_skinToneInput || !_skinVisorInput) return;
@@ -247,11 +367,11 @@ function initSkinUi() {
 
   _skinPresetSelect.addEventListener('change', () => {
     if (_skinPresetSelect.value === 'custom') {
-      setPlayerSkin({ ...playerSkinState, presetId: 'custom', presetName: 'Custom' });
+      setPlayerSkin({ ...playerSkinState, presetId: 'custom', presetName: 'Custom', promptText: '' });
       return;
     }
     const preset = getSkinPresetById(_skinPresetSelect.value);
-    setPlayerSkin(preset);
+    setPlayerSkin({ ...preset, promptText: '' });
   });
 
   const onColorEdit = () => {
@@ -259,6 +379,7 @@ function initSkinUi() {
       ...playerSkinState,
       presetId: 'custom',
       presetName: 'Custom',
+      promptText: '',
       suitColor: fromInputHex(_skinSuitInput.value, playerSkinState.suitColor),
       accentColor: fromInputHex(_skinAccentInput.value, playerSkinState.accentColor),
       skinColor: fromInputHex(_skinToneInput.value, playerSkinState.skinColor),
@@ -270,11 +391,46 @@ function initSkinUi() {
   _skinToneInput.addEventListener('input', onColorEdit);
   _skinVisorInput.addEventListener('input', onColorEdit);
 
+  const applyPromptSkin = async () => {
+    const promptText = sanitizePromptText(_skinPromptInput?.value);
+    if (!promptText) return;
+
+    if (_skinPromptAbortController) _skinPromptAbortController.abort();
+    const ctrl = new AbortController();
+    _skinPromptAbortController = ctrl;
+    setSkinPromptPending(true);
+    if (_skinNameLabel) _skinNameLabel.textContent = 'Current: Generating AI skin...';
+
+    try {
+      const skinConfig = await generateSkinFromPrompt(promptText, ctrl.signal);
+      if (ctrl.signal.aborted || !skinConfig) return;
+      setPlayerSkin(skinConfig);
+    } catch (err) {
+      if (!ctrl.signal.aborted) {
+        console.warn('Skin generation failed:', err);
+      }
+    } finally {
+      if (_skinPromptAbortController === ctrl) {
+        _skinPromptAbortController = null;
+        setSkinPromptPending(false);
+        syncSkinUi();
+      }
+    }
+  };
+  _skinApplyButton?.addEventListener('click', applyPromptSkin);
+  _skinPromptInput?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      applyPromptSkin();
+    }
+  });
+
   randomButton?.addEventListener('click', () => {
     setPlayerSkin({
       ...playerSkinState,
       presetId: 'custom',
       presetName: 'Custom',
+      promptText: '',
       suitColor: randomPlayerColor(),
       accentColor: randomPlayerColor(),
       skinColor: randomPlayerColor(),
@@ -283,6 +439,7 @@ function initSkinUi() {
     });
   });
 
+  setSkinPromptPending(false);
   syncSkinUi();
 }
 
@@ -1542,9 +1699,21 @@ function updateCamera(dt) {
 // ══════════════════════════════════════════════════
 // INPUT
 // ══════════════════════════════════════════════════
+function isTextEntryTarget(target) {
+  if (!(target instanceof HTMLElement)) return false;
+  if (target.isContentEditable) return true;
+  const tagName = target.tagName;
+  return tagName === 'INPUT' || tagName === 'TEXTAREA' || tagName === 'SELECT';
+}
+
 function setupInput() {
   window.addEventListener('keydown', (e) => {
+<<<<<<< Updated upstream
     if (isForgeOpen() || window._blockGameInput) return;
+=======
+    if (isTextEntryTarget(e.target)) return;
+    if (isForgeOpen()) return;
+>>>>>>> Stashed changes
     keys[e.key.toLowerCase()] = true;
     if (e.key >= '1' && e.key <= '4') {
       switchWeapon(parseInt(e.key) - 1);
