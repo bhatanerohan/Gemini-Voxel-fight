@@ -85,6 +85,57 @@ const _playerForce = new THREE.Vector3();
 
 const player = { pos: new THREE.Vector3(0, 0.6, 0), vel: new THREE.Vector3(), mesh: null, hp: 100, maxHp: 100, invulnTimer: 0 };
 const enemies = [];
+const crates = [];
+
+// ── Destructible Crates ──
+function createCrate() {
+  const group = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({
+    color: 0x8B6914, roughness: 0.65, metalness: 0.1, flatShading: true,
+    emissive: 0x000000, emissiveIntensity: 0,
+  });
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.2, 1.2), mat);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  group.add(mesh);
+  // Accent band
+  const bandMat = new THREE.MeshStandardMaterial({
+    color: 0x6B4F10, roughness: 0.7, metalness: 0.05, flatShading: true,
+  });
+  const band = new THREE.Mesh(new THREE.BoxGeometry(1.25, 0.15, 1.25), bandMat);
+  band.position.y = 0.2;
+  band.castShadow = true;
+  group.add(band);
+  const band2 = new THREE.Mesh(new THREE.BoxGeometry(1.25, 0.15, 1.25), bandMat);
+  band2.position.y = -0.2;
+  band2.castShadow = true;
+  group.add(band2);
+  return { group, bodyMesh: mesh };
+}
+
+function initCrates() {
+  const positions = [
+    [6, 6], [-6, 6], [6, -6], [-6, -6],
+    [20, 0], [-20, 0], [0, 20], [0, -20],
+  ];
+  for (const [x, z] of positions) {
+    const { group, bodyMesh } = createCrate();
+    group.position.set(x, 0.6, z);
+    scene.add(group);
+    aimCollisionMeshes.push(bodyMesh);
+    crates.push({
+      pos: new THREE.Vector3(x, 0.6, z),
+      vel: new THREE.Vector3(),
+      hp: 50,
+      maxHp: 50,
+      alive: true,
+      mesh: group,
+      bodyMesh,
+      isObject: true,
+      originalPos: new THREE.Vector3(x, 0.6, z),
+    });
+  }
+}
 
 function createVoxelHumanoid({
   suitColor = 0x3a7cff,
@@ -658,8 +709,11 @@ function init() {
     });
   });
 
+  // Init crates
+  initCrates();
+
   // Init sandbox with references
-  initSandbox(scene, camera, player, enemies, () => playerYaw, () => getPlayerAimPoint(), { triggerSlowMo, triggerFlash });
+  initSandbox(scene, camera, player, enemies, () => playerYaw, () => getPlayerAimPoint(), { triggerSlowMo, triggerFlash }, crates);
   MatchMemory.setWeaponGetter(getActiveWeaponName);
 
   // Init wave system
@@ -818,6 +872,18 @@ function restartGame() {
     e.vel.set(0, 0, 0);
     e.mesh.visible = true;
     e.attackCooldown = 0;
+  }
+  // Reset crates
+  for (const c of crates) {
+    c.hp = c.maxHp;
+    c.alive = true;
+    c.pos.copy(c.originalPos);
+    c.mesh.visible = true;
+    c.mesh.position.copy(c.originalPos);
+    c.bodyMesh.material.opacity = 1;
+    c.bodyMesh.material.transparent = false;
+    c.bodyMesh.material.emissive.set(0x000000);
+    c.bodyMesh.material.emissiveIntensity = 0;
   }
 }
 

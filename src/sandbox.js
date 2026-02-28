@@ -52,11 +52,9 @@ let _scene, _camera, _enemies, _player, _playerYaw;
 let _getAimPoint = null;
 let _effects = {};
 let _particlePool = null;
-// _compatThree removed — use THREE directly
+let _crates = [];
 
-// THREE is used directly — no polyfill needed for modern Three.js
-
-export function initSandbox(scene, camera, player, enemies, getYaw, getAimPoint, effects = {}) {
+export function initSandbox(scene, camera, player, enemies, getYaw, getAimPoint, effects = {}, crates = []) {
   _scene = scene;
   _camera = camera;
   _player = player;
@@ -65,6 +63,7 @@ export function initSandbox(scene, camera, player, enemies, getYaw, getAimPoint,
   _getAimPoint = typeof getAimPoint === 'function' ? getAimPoint : null;
   _effects = effects;
   _particlePool = new ParticlePool(scene, 800);
+  _crates = crates;
 }
 
 function getPlayerAimPoint() {
@@ -385,6 +384,96 @@ function deathEffect(pos) {
   });
 }
 
+// ── Destructible Crate Damage ──
+function damageCrate(c, amt, flashOpts = {}) {
+  if (!Number.isFinite(amt) || amt <= 0) return;
+  if (c.alive === false) return;
+  c.hp -= amt;
+  playHit();
+  flashEnemyHit(c, { color: 0xffcc88, intensity: 1.6, durationMs: 80, ...flashOpts });
+
+  if (_camera) {
+    const screenPos = c.pos.clone().project(_camera);
+    const x = (screenPos.x * 0.5 + 0.5) * window.innerWidth;
+    const y = (-screenPos.y * 0.5 + 0.5) * window.innerHeight;
+    showDamageNumber(x, y, amt, '#ddaa44');
+  }
+
+  if (c.hp <= 0) {
+    crateDeathEffect(c);
+    c.alive = false;
+    c.mesh.visible = false;
+    respawnCrateAfterDelay(c);
+  }
+}
+
+function crateDeathEffect(c) {
+  const pos = c.pos.clone();
+  const crateColor = 0x8B6914;
+  // Spawn voxel cube fragments
+  for (let i = 0; i < 8; i++) {
+    const size = 0.15 + Math.random() * 0.15;
+    const frag = new THREE.Mesh(
+      new THREE.BoxGeometry(size, size, size),
+      new THREE.MeshStandardMaterial({ color: crateColor, flatShading: true })
+    );
+    const speed = 4 + Math.random() * 6;
+    const angle = Math.random() * Math.PI * 2;
+    const vy = 3 + Math.random() * 5;
+    const vel = new THREE.Vector3(Math.cos(angle) * speed, vy, Math.sin(angle) * speed);
+    entities.push({
+      mesh: frag, pos: pos.clone().add(new THREE.Vector3((Math.random() - 0.5) * 0.5, Math.random() * 0.5, (Math.random() - 0.5) * 0.5)),
+      vel, angVel: { x: (Math.random() - 0.5) * 10, y: (Math.random() - 0.5) * 10, z: (Math.random() - 0.5) * 10 },
+      gravity: 1, radius: size * 0.5, bounce: 0.25, lifetime: 2, age: 0, onUpdate: null, alive: true,
+      destroy() { destroyEntity(this); }, getPosition() { return this.pos.clone(); },
+      getVelocity() { return this.vel.clone(); }, setVelocity(v) { this.vel.set(v.x||0, v.y||0, v.z||0); },
+    });
+    frag.position.copy(pos);
+    _scene.add(frag);
+  }
+
+  // Particle burst
+  _particlePool.burst({ position: pos, color: 0xbb8822, count: 10, speed: 6, lifetime: 0.6, size: 3, gravity: 0.8 });
+
+  // Light flash
+  const fl = new THREE.PointLight(0xffaa44, 2.5, 8);
+  fl.position.copy(pos);
+  _scene.add(fl);
+  activeLights.push(fl);
+  const flt0 = elapsed;
+  cbs.push((dt, el) => {
+    const a = el - flt0;
+    fl.intensity = Math.max(0, 2.5 * (1 - a / 0.25));
+    if (a > 0.25) { _scene.remove(fl); const idx = activeLights.indexOf(fl); if (idx !== -1) activeLights.splice(idx, 1); return false; }
+  });
+
+  addScorchMark(pos, 1.5);
+}
+
+function respawnCrateAfterDelay(c) {
+  setTimeout(() => {
+    c.hp = c.maxHp;
+    c.alive = true;
+    c.pos.copy(c.originalPos);
+    c.mesh.position.copy(c.originalPos);
+    c.mesh.visible = true;
+    // Fade in
+    c.bodyMesh.material.transparent = true;
+    c.bodyMesh.material.opacity = 0;
+    const t0 = elapsed;
+    cbs.push((dt, el) => {
+      const age = el - t0;
+      const alpha = Math.min(1, age / 0.5);
+      c.bodyMesh.material.opacity = alpha;
+      if (alpha >= 1) {
+        c.bodyMesh.material.transparent = false;
+        c.bodyMesh.material.opacity = 1;
+        return false;
+      }
+    });
+  }, 12000);
+}
+
 // ── Build the context passed to AI weapon code ──
 export function buildCtx() {
   const yaw = _playerYaw();
@@ -447,6 +536,22 @@ export function buildCtx() {
     },
     distanceTo: (point) => e.pos.distanceTo(toVec3(point)),
   });
+  const wrapCrate = (c) => ({
+    position: c.pos.clone(),
+    mesh: c.mesh,
+    hp: c.hp,
+    isObject: true,
+    velocity: new THREE.Vector3(),
+    takeDamage: (amt) => damageCrate(c, amt),
+    applyForce: () => {},
+    setVelocity: () => {},
+    dampVelocity: () => {},
+    freeze: () => {},
+    stun: () => {},
+    slow: () => {},
+    ignite: () => {},
+    distanceTo: (point) => c.pos.distanceTo(toVec3(point)),
+  });
 
   const ctx = {
     THREE: THREE, scene: _scene,
@@ -466,7 +571,12 @@ export function buildCtx() {
     },
 
     getEnemies: () => {
-      if (!_cachedEnemyWraps) _cachedEnemyWraps = _enemies.map(wrapEnemy);
+      if (!_cachedEnemyWraps) {
+        _cachedEnemyWraps = [
+          ..._enemies.filter(e => e.alive).map(wrapEnemy),
+          ..._crates.filter(c => c.alive).map(wrapCrate),
+        ];
+      }
       return _cachedEnemyWraps;
     },
 
@@ -513,15 +623,17 @@ export function buildCtx() {
       const angleDeg = THREE.MathUtils.clamp(opts.angleDeg ?? 22, 0.1, 180);
       const cosThresh = Math.cos(THREE.MathUtils.degToRad(angleDeg));
 
-      return _enemies
-        .filter((e) => {
-          const toEnemy = e.pos.clone().sub(o);
-          const d = toEnemy.length();
-          if (d <= 0.0001 || d > range) return false;
-          toEnemy.normalize();
-          return dir.dot(toEnemy) >= cosThresh;
-        })
-        .map(wrapEnemy);
+      const inCone = (target) => {
+        const toTarget = target.pos.clone().sub(o);
+        const d = toTarget.length();
+        if (d <= 0.0001 || d > range) return false;
+        toTarget.normalize();
+        return dir.dot(toTarget) >= cosThresh;
+      };
+      return [
+        ..._enemies.filter(e => e.alive && inCone(e)).map(wrapEnemy),
+        ..._crates.filter(c => c.alive && inCone(c)).map(wrapCrate),
+      ];
     },
     applyRadialForce: (center, opts = {}) => {
       const c = toVec3(center);
@@ -580,6 +692,15 @@ export function buildCtx() {
           const dir = e.pos.clone().sub(p).normalize();
           e.vel.add(dir.multiplyScalar(force * falloff));
           damageEnemy(e, damage * falloff);
+        }
+      }
+      // Damage crates
+      for (const c of _crates) {
+        if (!c.alive) continue;
+        const d = c.pos.distanceTo(p);
+        if (d < radius) {
+          const falloff = 1 - d / radius;
+          damageCrate(c, damage * falloff);
         }
       }
 

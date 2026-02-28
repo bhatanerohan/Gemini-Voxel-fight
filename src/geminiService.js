@@ -1,7 +1,7 @@
 // src/geminiService.js — Reusable Gemini long-context client
 
 const ENDPOINT = '/gemini/chat/completions';
-const MODELS = ['gemini-3-pro-preview', 'gemini-3-flash-preview', 'gemini-2.5-flash'];
+const MODELS = ['gemini-3-flash-preview'];
 
 /**
  * Extract JSON from a string that may contain markdown code fences or extra text.
