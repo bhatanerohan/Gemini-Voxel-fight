@@ -43,7 +43,7 @@ Respond with ONLY valid JSON in this exact format:
   "personality": "One-line flavor text"
 }`,
   temperature: 0.9,
-  maxTokens: 1500,
+  maxTokens: 4096,
 });
 
 const DEFAULT_CONFIG = {

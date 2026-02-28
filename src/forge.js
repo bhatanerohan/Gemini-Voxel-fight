@@ -51,7 +51,7 @@ export function initForge(callbacks = {}) {
         systemPrompt: CODER_PROMPT,
         userMessage: coderInput,
         temperature: 0.7,
-        maxTokens: 4000,
+        maxTokens: 8192,
       });
       if (!code) throw new Error('Gemini returned an empty response.');
       const generationMs = Math.round(performance.now() - generationStart);

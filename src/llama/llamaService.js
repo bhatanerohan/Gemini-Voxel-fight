@@ -15,7 +15,7 @@ export async function runAgent(agentConfig, userMessage) {
       systemPrompt: agentConfig.systemPrompt,
       userMessage,
       temperature: agentConfig.temperature ?? 0.8,
-      maxTokens: agentConfig.maxTokens ?? 2000,
+      maxTokens: agentConfig.maxTokens ?? 8192,
     });
     return result;
   } catch (err) {
@@ -28,6 +28,6 @@ export async function runAgent(agentConfig, userMessage) {
  * Define an agent config (lightweight wrapper for hackathon speed).
  * In production this would be a full LlamaIndex AgentWorkflow.
  */
-export function defineAgent({ name, systemPrompt, temperature = 0.8, maxTokens = 2000 }) {
+export function defineAgent({ name, systemPrompt, temperature = 0.8, maxTokens = 8192 }) {
   return { name, systemPrompt, temperature, maxTokens };
 }

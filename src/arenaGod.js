@@ -70,7 +70,7 @@ async function consultArenaGod(triggerType) {
       systemPrompt: SYSTEM_PROMPT,
       userMessage: buildUserMessage(triggerType),
       temperature: 0.9,
-      maxTokens: 500,
+      maxTokens: 4096,
     });
 
     if (!result || !result.dialogue) return;

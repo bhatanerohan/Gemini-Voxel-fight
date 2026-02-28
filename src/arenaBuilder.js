@@ -6,6 +6,65 @@ let _envParticleTimer = 0;
 let _envConfig = null;
 let _groundPulseMesh = null;
 let _particlePool = null;
+let _skyMesh = null;
+
+// ── Gradient Sky Dome ──
+
+const SKY_VERT = `
+varying vec3 vWorldPosition;
+void main() {
+  vec4 worldPos = modelMatrix * vec4(position, 1.0);
+  vWorldPosition = worldPos.xyz;
+  gl_Position = projectionMatrix * viewMatrix * worldPos;
+}`;
+
+const SKY_FRAG = `
+uniform vec3 topColor;
+uniform vec3 horizonColor;
+uniform vec3 bottomColor;
+varying vec3 vWorldPosition;
+void main() {
+  float h = normalize(vWorldPosition).y;
+  vec3 col;
+  if (h > 0.0) {
+    col = mix(horizonColor, topColor, pow(h, 0.6));
+  } else {
+    col = mix(horizonColor, bottomColor, pow(-h, 0.4));
+  }
+  gl_FragColor = vec4(col, 1.0);
+}`;
+
+function createOrUpdateSky(scene, topHex, horizonHex, bottomHex) {
+  const top = new THREE.Color(topHex);
+  const horizon = new THREE.Color(horizonHex);
+  const bottom = new THREE.Color(bottomHex);
+
+  if (_skyMesh) {
+    _skyMesh.material.uniforms.topColor.value.copy(top);
+    _skyMesh.material.uniforms.horizonColor.value.copy(horizon);
+    _skyMesh.material.uniforms.bottomColor.value.copy(bottom);
+    return;
+  }
+
+  const skyGeo = new THREE.SphereGeometry(400, 32, 16);
+  const skyMat = new THREE.ShaderMaterial({
+    vertexShader: SKY_VERT,
+    fragmentShader: SKY_FRAG,
+    uniforms: {
+      topColor: { value: top },
+      horizonColor: { value: horizon },
+      bottomColor: { value: bottom },
+    },
+    side: THREE.BackSide,
+    depthWrite: false,
+  });
+  _skyMesh = new THREE.Mesh(skyGeo, skyMat);
+  _skyMesh.renderOrder = -1;
+  scene.add(_skyMesh);
+
+  // Disable the flat background color so the sky dome is visible
+  scene.background = null;
+}
 
 export function setArenaParticlePool(pool) { _particlePool = pool; }
 
@@ -16,8 +75,12 @@ export function setArenaParticlePool(pool) { _particlePool = pool; }
 export function buildArenaFromConfig(scene, config, coverBlockMeshes, collisionMeshes) {
   const { theme, coverBlocks, hazards, platforms, environmentalEffects } = config;
 
-  // 1. Apply theme colors
-  if (theme.backgroundColor) scene.background = new THREE.Color(theme.backgroundColor);
+  // 1. Apply theme colors + gradient sky
+  if (theme.skyTop && theme.skyHorizon && theme.skyBottom) {
+    createOrUpdateSky(scene, theme.skyTop, theme.skyHorizon, theme.skyBottom);
+  } else if (theme.backgroundColor) {
+    scene.background = new THREE.Color(theme.backgroundColor);
+  }
   if (theme.fogColor) scene.fog = new THREE.FogExp2(theme.fogColor, theme.fogDensity || 0.011);
 
   // Recolor floor (first plane mesh found)

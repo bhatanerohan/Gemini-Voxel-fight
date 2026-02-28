@@ -21,7 +21,7 @@ export async function generateChronicle() {
     systemPrompt: SYSTEM_PROMPT,
     userMessage: `Here is the match data:\n${context}`,
     temperature: 0.95,
-    maxTokens: 1500,
+    maxTokens: 4096,
   });
 
   if (result && result.title && result.chronicle) {

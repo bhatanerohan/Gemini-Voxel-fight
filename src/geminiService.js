@@ -35,19 +35,26 @@ function extractJSON(text) {
 async function callGemini(opts) {
   for (const model of MODELS) {
     try {
+      const body = {
+        model,
+        temperature: opts.temperature ?? 0.9,
+        max_tokens: opts.maxTokens ?? 8192,
+        messages: [
+          { role: 'system', content: opts.systemPrompt },
+          { role: 'user', content: opts.userMessage },
+        ],
+      };
+
+      // Force structured JSON output when requested
+      if (opts.jsonMode) {
+        body.response_format = { type: 'json_object' };
+      }
+
       const res = await fetch(ENDPOINT, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         signal: opts.signal,
-        body: JSON.stringify({
-          model,
-          temperature: opts.temperature ?? 0.9,
-          max_tokens: opts.maxTokens ?? 2000,
-          messages: [
-            { role: 'system', content: opts.systemPrompt },
-            { role: 'user', content: opts.userMessage },
-          ],
-        }),
+        body: JSON.stringify(body),
       });
 
       if (res.status === 401 || res.status === 403) {
@@ -75,24 +82,17 @@ async function callGemini(opts) {
 
 /**
  * Send a prompt to Gemini expecting structured JSON output.
+ * Automatically enables response_format: json_object for reliable parsing.
  * Returns parsed JSON object or null on failure.
  * NEVER throws.
- *
- * @param {object} opts
- * @param {string} opts.systemPrompt
- * @param {string} opts.userMessage
- * @param {number} [opts.temperature=0.9]
- * @param {number} [opts.maxTokens=2000]
- * @param {AbortSignal} [opts.signal]
- * @returns {Promise<object|null>}
  */
 export async function geminiJSON(opts) {
   try {
-    const result = await callGemini(opts);
+    const result = await callGemini({ ...opts, jsonMode: true });
     if (!result) return null;
     const parsed = extractJSON(result.text);
     if (!parsed) {
-      console.warn('[geminiService] Failed to parse JSON from response');
+      console.warn('[geminiService] Failed to parse JSON from response:', result.text?.slice(0, 300));
     }
     return parsed;
   } catch (err) {
@@ -105,14 +105,6 @@ export async function geminiJSON(opts) {
  * Send a prompt and get raw text back.
  * Returns string or null on failure.
  * NEVER throws.
- *
- * @param {object} opts
- * @param {string} opts.systemPrompt
- * @param {string} opts.userMessage
- * @param {number} [opts.temperature=0.9]
- * @param {number} [opts.maxTokens=2000]
- * @param {AbortSignal} [opts.signal]
- * @returns {Promise<string|null>}
  */
 export async function geminiText(opts) {
   try {

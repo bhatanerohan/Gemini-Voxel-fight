@@ -21,6 +21,9 @@ Respond with ONLY valid JSON:
   "theme": {
     "name": "Theme Name",
     "backgroundColor": "#hex",
+    "skyTop": "#hex (sky zenith color — can be vivid! e.g. deep blue, blood red, violet, teal)",
+    "skyHorizon": "#hex (sky horizon color — lighter/warmer, blends with fog)",
+    "skyBottom": "#hex (below-horizon color — usually matches fog/ground)",
     "fogColor": "#hex",
     "fogDensity": 0.015,
     "floorColor": "#hex",
@@ -46,13 +49,16 @@ Respond with ONLY valid JSON:
   "narrativeIntro": "Welcome to..."
 }`,
   temperature: 0.9,
-  maxTokens: 2500,
+  maxTokens: 8192,
 });
 
 const DEFAULT_ARENA = {
   theme: {
     name: 'Default Arena',
     backgroundColor: '#060612',
+    skyTop: '#0a0a2e',
+    skyHorizon: '#1a1040',
+    skyBottom: '#060612',
     fogColor: '#060612',
     fogDensity: 0.011,
     floorColor: '#0e0e1a',

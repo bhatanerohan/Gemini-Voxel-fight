@@ -193,7 +193,7 @@ Rules:
       systemPrompt,
       userMessage,
       temperature: 0.9,
-      maxTokens: 400,
+      maxTokens: 4096,
       signal: _abortCtrl.signal,
     });
     if (!raw) return null;

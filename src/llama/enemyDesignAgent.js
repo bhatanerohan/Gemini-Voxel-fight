@@ -51,7 +51,7 @@ Respond with ONLY valid JSON:
   ]
 }`,
   temperature: 1.0,
-  maxTokens: 2000,
+  maxTokens: 8192,
 });
 
 export async function generateEnemyDesigns(wave, count, matchContext = '') {

@@ -31,7 +31,7 @@ Respond with ONLY valid JSON:
   "description": "Short visual description"
 }`,
   temperature: 0.85,
-  maxTokens: 1000,
+  maxTokens: 4096,
 });
 
 // Cache per character concept + threshold

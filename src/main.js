@@ -238,7 +238,7 @@ async function generateSkinFromPrompt(rawPrompt, signal) {
     systemPrompt: AVATAR_SKIN_SYSTEM_PROMPT,
     userMessage: `Create a skin for this avatar prompt: "${promptText}"`,
     temperature: 0.65,
-    maxTokens: 320,
+    maxTokens: 4096,
     signal,
   });
 

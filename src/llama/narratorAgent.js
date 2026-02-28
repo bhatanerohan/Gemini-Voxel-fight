@@ -23,7 +23,7 @@ Respond with ONLY valid JSON:
   "mood": "epic|ominous|triumphant|desperate|quiet"
 }`,
   temperature: 1.0,
-  maxTokens: 200,
+  maxTokens: 2048,
 });
 
 // Cache for pre-warmed lines
