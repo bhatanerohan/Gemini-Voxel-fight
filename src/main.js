@@ -21,7 +21,6 @@ import { initArenaGod } from './arenaGod.js';
 import { saveSessionSummary } from './sessionMemory.js';
 import { generateChronicle, displayChronicle, hideChronicle } from './warChronicle.js';
 import { initMutations, updateMutations } from './arenaMutations.js';
-<<<<<<< Updated upstream
 import { initThemeManager, applyThemeInstant, PRESETS } from './themeManager.js';
 import { initThemeUI } from './themeUI.js';
 import { applyAvatarConfig, updateAvatarEffects, getAvatarConcept, resetAvatar, setAvatarParticlePool } from './avatarBuilder.js';
@@ -32,9 +31,7 @@ import { getDamageMutation, preGenerateMutations, clearMutationCache } from './l
 import { applyDamageMutation, updateDamageEffects, checkDamageThreshold, clearDamageMutations, setDamageParticlePool } from './damageMutations.js';
 import { generateArenaConfig } from './llama/arenaGenAgent.js';
 import { buildArenaFromConfig, updateArenaEffects, setArenaParticlePool } from './arenaBuilder.js';
-=======
 import { geminiJSON } from './geminiService.js';
->>>>>>> Stashed changes
 
 // ══════════════════════════════════════════════════
 // STATE
@@ -1708,12 +1705,7 @@ function isTextEntryTarget(target) {
 
 function setupInput() {
   window.addEventListener('keydown', (e) => {
-<<<<<<< Updated upstream
     if (isForgeOpen() || window._blockGameInput) return;
-=======
-    if (isTextEntryTarget(e.target)) return;
-    if (isForgeOpen()) return;
->>>>>>> Stashed changes
     keys[e.key.toLowerCase()] = true;
     if (e.key >= '1' && e.key <= '4') {
       switchWeapon(parseInt(e.key) - 1);
