@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build"
+    "build": "vite build",
+    "coop-server": "node scripts/coop-server.js"
   },
   "dependencies": {
     "three": "^0.128.0"

@@ -55,7 +55,13 @@ function sortLineHits(hits, sortBy) {
 function computeLineHits(runtime, origin, direction, opts, useIgnoreY) {
   const o = toVec3(runtime, origin);
   const baseDir = normalizeDirection(runtime, direction);
-  const range = Math.max(0, opts.range ?? 20);
+  let range = Math.max(0, opts.range ?? 20);
+  if (typeof runtime?.raycast === 'function') {
+    const worldHit = runtime.raycast(o, baseDir, range);
+    if (worldHit && Number.isFinite(worldHit.distance)) {
+      range = Math.min(range, Math.max(0, worldHit.distance));
+    }
+  }
 
   const widthBase = Math.max(0, opts.width ?? opts.radius ?? 1);
   const inflate = Math.max(0, opts.inflate ?? 0);

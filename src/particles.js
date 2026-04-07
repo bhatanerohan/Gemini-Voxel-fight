@@ -17,6 +17,15 @@ export class ParticlePool {
     this.velocities = new Float32Array(maxParticles * 3);
     this.gravities = new Float32Array(maxParticles);
     this.startSizes = new Float32Array(maxParticles);
+    this.activeSlots = new Int32Array(maxParticles);
+    this.activePositions = new Int32Array(maxParticles);
+    this.freeSlots = new Int32Array(maxParticles);
+    this.activePositions.fill(-1);
+    for (let i = 0; i < maxParticles; i++) {
+      this.freeSlots[i] = maxParticles - 1 - i;
+    }
+    this.freeTop = maxParticles;
+    this._color = new THREE.Color();
 
     // GPU buffers
     this.positions = new Float32Array(maxParticles * 3);
@@ -24,9 +33,12 @@ export class ParticlePool {
     this.sizes = new Float32Array(maxParticles);
 
     const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(this.positions, 3));
-    geo.setAttribute('color', new THREE.BufferAttribute(this.colors, 4));
-    geo.setAttribute('size', new THREE.BufferAttribute(this.sizes, 1));
+    this.positionAttr = new THREE.BufferAttribute(this.positions, 3).setUsage(THREE.DynamicDrawUsage);
+    this.colorAttr = new THREE.BufferAttribute(this.colors, 4).setUsage(THREE.DynamicDrawUsage);
+    this.sizeAttr = new THREE.BufferAttribute(this.sizes, 1).setUsage(THREE.DynamicDrawUsage);
+    geo.setAttribute('position', this.positionAttr);
+    geo.setAttribute('color', this.colorAttr);
+    geo.setAttribute('size', this.sizeAttr);
 
     // Custom shader for sized + colored + fading points
     const mat = new THREE.ShaderMaterial({
@@ -88,14 +100,17 @@ export class ParticlePool {
     const py = position.y ?? 0;
     const pz = position.z ?? 0;
 
-    const col = new THREE.Color(color);
+    const col = this._color.set(color);
+
+    let spawned = false;
 
     for (let i = 0; i < count; i++) {
-      const slot = this._findSlot();
+      const slot = this._acquireSlot();
       if (slot === -1) break; // pool full
 
       const i3 = slot * 3;
       const i4 = slot * 4;
+      spawned = true;
 
       this.alive[slot] = 1;
       this.ages[slot] = 0;
@@ -122,42 +137,65 @@ export class ParticlePool {
 
       this.sizes[slot] = this.startSizes[slot];
     }
+
+    if (!spawned) return;
+    this.positionAttr.needsUpdate = true;
+    this.colorAttr.needsUpdate = true;
+    this.sizeAttr.needsUpdate = true;
   }
 
-  _findSlot() {
-    // Find first dead slot
-    for (let i = 0; i < this.max; i++) {
-      if (!this.alive[i]) return i;
+  _acquireSlot() {
+    if (this.freeTop <= 0) return -1;
+    const slot = this.freeSlots[--this.freeTop];
+    this.activePositions[slot] = this.count;
+    this.activeSlots[this.count] = slot;
+    this.count++;
+    return slot;
+  }
+
+  _releaseSlot(slot, activeIndex = this.activePositions[slot]) {
+    if (activeIndex < 0 || activeIndex >= this.count) return;
+
+    const lastIndex = this.count - 1;
+    const lastSlot = this.activeSlots[lastIndex];
+    if (activeIndex !== lastIndex) {
+      this.activeSlots[activeIndex] = lastSlot;
+      this.activePositions[lastSlot] = activeIndex;
     }
-    return -1; // pool exhausted
+
+    this.activePositions[slot] = -1;
+    this.count = lastIndex;
+    this.freeSlots[this.freeTop++] = slot;
   }
 
   update(dt) {
-    let anyAlive = false;
+    if (this.count === 0) return;
 
-    for (let i = 0; i < this.max; i++) {
-      if (!this.alive[i]) {
-        this.sizes[i] = 0; // hide dead particles
-        continue;
-      }
+    let i = 0;
+    let didUpdate = false;
 
-      anyAlive = true;
-      this.ages[i] += dt;
+    while (i < this.count) {
+      const slot = this.activeSlots[i];
+      this.ages[slot] += dt;
 
-      const life = this.lifetimes[i];
-      const t = this.ages[i] / life; // 0 to 1
+      const life = this.lifetimes[slot];
+      const t = this.ages[slot] / life; // 0 to 1
 
       if (t >= 1) {
-        this.alive[i] = 0;
-        this.sizes[i] = 0;
+        const i4 = slot * 4;
+        this.alive[slot] = 0;
+        this.colors[i4 + 3] = 0;
+        this.sizes[slot] = 0;
+        this._releaseSlot(slot, i);
+        didUpdate = true;
         continue;
       }
 
-      const i3 = i * 3;
-      const i4 = i * 4;
+      const i3 = slot * 3;
+      const i4 = slot * 4;
 
       // Apply gravity
-      this.velocities[i3 + 1] -= 9.81 * this.gravities[i] * dt;
+      this.velocities[i3 + 1] -= 9.81 * this.gravities[slot] * dt;
 
       // Integrate position
       this.positions[i3] += this.velocities[i3] * dt;
@@ -175,12 +213,16 @@ export class ParticlePool {
       // Fade alpha and shrink
       const fade = 1 - t;
       this.colors[i4 + 3] = fade;
-      this.sizes[i] = this.startSizes[i] * (1 + t * 0.5) * fade;
+      this.sizes[slot] = this.startSizes[slot] * (1 + t * 0.5) * fade;
+      didUpdate = true;
+      i++;
     }
 
-    // Upload to GPU
-    this.points.geometry.attributes.position.needsUpdate = true;
-    this.points.geometry.attributes.color.needsUpdate = true;
-    this.points.geometry.attributes.size.needsUpdate = true;
+    if (!didUpdate) return;
+
+    // Upload only while active particles are animating or a particle just died.
+    this.positionAttr.needsUpdate = true;
+    this.colorAttr.needsUpdate = true;
+    this.sizeAttr.needsUpdate = true;
   }
 }

@@ -6,7 +6,7 @@ The core idea is simple:
 - you control a voxel fighter in a small arena
 - you open the Weapon Forge
 - you describe a weapon in natural language
-- Gemini generates the weapon behavior live
+- OpenAI generates the weapon behavior live
 - the game compiles that code and equips it immediately
 
 ## Features
@@ -14,7 +14,7 @@ The core idea is simple:
 - Third-person voxel arena combat
 - Mouse-driven aim with over-the-shoulder camera
 - Integrated forearm cannon muzzle on the player
-- AI-generated weapons through Gemini
+- AI-generated weapons through OpenAI
 - Runtime weapon sandbox/context with reusable SDK helpers
 - Status effects like freeze, stun, slow, burn, force, beams, explosions, trails, and particles
 
@@ -23,13 +23,13 @@ The core idea is simple:
 - `Vite`
 - `Three.js`
 - plain JavaScript modules
-- Gemini API through the OpenAI-compatible endpoint
+- OpenAI API through the Vite dev proxy
 
 ## Requirements
 
 - Node.js 18+ recommended
 - npm
-- A Gemini API key
+- An OpenAI API key
 
 ## Setup
 
@@ -39,21 +39,19 @@ The core idea is simple:
 npm install
 ```
 
-### 2. Add your Gemini API key
+### 2. Add your OpenAI API key
 
 This project reads the key from a local `.env` file.
 
-The repo already includes:
-- [`.env`](./.env)
-- [`.env.example`](./.env.example)
+The repo includes [`.env.example`](./.env.example).
 
-Open `.env` and set:
+Create `.env` in the project root and set:
 
 ```env
-GEMINI_API_KEY=YOUR_GEMINI_API_KEY
+OPENAI_API_KEY=YOUR_OPENAI_API_KEY
 ```
 
-If you prefer, you can copy `.env.example` into `.env` and fill it in.
+You can copy `.env.example` into `.env` and fill it in.
 
 ## Run Locally
 
@@ -68,6 +66,48 @@ Then open the local URL shown by Vite, usually:
 ```text
 http://localhost:5173
 ```
+
+## Co-op Modes
+
+### Local tabs on one machine
+
+Open two tabs with the same room and different names:
+
+```text
+http://localhost:5173/?coop=1&room=alpha&name=PilotA
+http://localhost:5173/?coop=1&room=alpha&name=PilotB
+```
+
+This mode uses `BroadcastChannel`, so it only works within the same browser profile / machine.
+
+### Network co-op over WebSocket
+
+Start the co-op room server in a second terminal:
+
+```bash
+npm run coop-server
+```
+
+By default it listens on:
+
+```text
+ws://0.0.0.0:8787
+```
+
+Then open the game with a `server` parameter pointing at the machine running the co-op server:
+
+```text
+http://192.168.1.42:5173/?coop=1&room=alpha&name=PilotA&server=ws://192.168.1.42:8787
+http://192.168.1.42:5173/?coop=1&room=alpha&name=PilotB&server=ws://192.168.1.42:8787
+```
+
+You can also use:
+
+```text
+?server=auto
+```
+
+which resolves to `ws://<current-host>:8787` on `http` pages and `wss://<current-host>:8787` on `https` pages.
 
 ## Build
 
@@ -85,17 +125,18 @@ The output goes to `dist/`.
 - `Mouse`: aim
 - `Hold Left Click`: fire
 - `T`: open Weapon Forge
+- `G`: cycle graphics quality
 - `Esc`: close Weapon Forge
 
 ## How The Weapon Forge Works
 
 1. Press `T`
 2. Type a weapon idea in plain English
-3. Gemini generates the weapon code
+3. OpenAI generates the weapon code
 4. The game compiles it and equips it instantly
 
 When a weapon is generated, the browser console logs:
-- the Gemini model used
+- the OpenAI model used
 - generation time in milliseconds
 - the generated weapon code
 
@@ -116,47 +157,47 @@ Try prompts like these:
 
 - [`src/main.js`](./src/main.js): scene setup, player, enemies, camera, controls, aiming, humanoid rig
 - [`src/sandbox.js`](./src/sandbox.js): runtime context passed to generated weapons
-- [`src/forge.js`](./src/forge.js): Gemini request flow and weapon compilation
+- [`src/forge.js`](./src/forge.js): OpenAI request flow and weapon compilation
 - [`src/prompt.js`](./src/prompt.js): system prompt and weapon-generation rules
 - [`src/weaponSdk/`](./src/weaponSdk): reusable targeting, damage, status, force, timing, and visuals helpers
 - [`progress.md`](./progress.md): running implementation notes and handoff history
 
 ## Environment Notes
 
-The frontend no longer reads the Gemini key directly.
+The frontend no longer reads the OpenAI key directly.
 
 Local development now works like this:
-- the browser calls `/gemini/chat/completions`
-- the Vite dev proxy in [`vite.config.js`](./vite.config.js) reads `GEMINI_API_KEY` server-side
+- the browser calls `/openai/chat/completions`
+- the Vite dev proxy in [`vite.config.js`](./vite.config.js) reads `OPENAI_API_KEY` server-side
 - the proxy adds the upstream `Authorization` header before forwarding the request
 
 Important implication:
-- `GEMINI_API_KEY` is not exposed to the client bundle
-- using `VITE_GEMINI_API_KEY` for secrets is incorrect and should be avoided
+- `OPENAI_API_KEY` is not exposed to the client bundle
+- using `VITE_OPENAI_API_KEY` for secrets is incorrect and should be avoided
 
 For production hosting, use the same pattern:
-- keep the Gemini API key on the server
-- call Gemini through a backend endpoint or serverless function
+- keep the OpenAI API key on the server
+- call OpenAI through a backend endpoint or serverless function
 
 ## Current Production Caveat
 
-The project currently uses the Vite dev proxy in [`vite.config.js`](./vite.config.js) for `/gemini`.
+The project currently uses the Vite dev proxy in [`vite.config.js`](./vite.config.js) for `/openai`.
 
 That means:
-- local development works when `GEMINI_API_KEY` is set in `.env`
+- local development works when `OPENAI_API_KEY` is set in `.env`
 - a static production deploy will build successfully
 - but AI weapon generation will not work in production unless you add a real backend/function/proxy
 
-If you deploy this to Vercel, Netlify, or similar, the frontend will load, but the Gemini forge needs a server-side route to stay functional.
+If you deploy this to Vercel, Netlify, or similar, the frontend will load, but the OpenAI forge needs a server-side route to stay functional.
 
 ## Troubleshooting
 
-### Weapon Forge says the Gemini key is missing
+### Weapon Forge says the OpenAI key is missing
 
 Make sure `.env` contains:
 
 ```env
-GEMINI_API_KEY=YOUR_GEMINI_API_KEY
+OPENAI_API_KEY=YOUR_OPENAI_API_KEY
 ```
 
 Then restart `npm run dev`.
@@ -172,23 +213,8 @@ Reason:
 - production does not
 
 Fix:
-- add a backend/serverless Gemini proxy
+- add a backend/serverless OpenAI proxy
 
 ### Performance drops with flashy weapons
 
 Very effect-heavy prompts can create lots of particles, lights, beams, and trails.
-
-Safer prompt style:
-- ask for strong behavior
-- keep visual wording controlled
-- avoid phrases like `constant giant explosions everywhere`
-
-## Notes
-
-- Generated weapons run against a game-specific runtime context, not arbitrary filesystem access.
-- The player weapon now fires from the integrated forearm cannon muzzle instead of a generic body-center point.
-- The aim direction uses the crosshair-aligned 3D aim ray, not just flat left/right yaw.
-
-## License / Status
-
-This is currently a prototype/hackathon-style project and does not include a formal license file in the repo.

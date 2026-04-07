@@ -1,0 +1,4 @@
+interface:
+  display_name: "Arena Layout Design"
+  short_description: "Deathmatch arena whiteboxing for this repo"
+  default_prompt: "Design or revise the arena layout in this repo. Use the repo constraints and arena heuristics references, preserve arena helpers, protect spawn lanes, and validate with syntax, build, and browser checks when available."

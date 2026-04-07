@@ -1,0 +1,13 @@
+[31mfailed to load config from D:\Gemini voxel fight\Gemini-Voxel-fight\vite.config.js[39m
+[31merror when starting dev server:
+Error: spawn EPERM
+    at ChildProcess.spawn (node:internal/child_process:421:11)
+    at Object.spawn (node:child_process:796:9)
+    at ensureServiceIsRunning (D:\Gemini voxel fight\Gemini-Voxel-fight\node_modules\esbuild\lib\main.js:1978:29)
+    at build (D:\Gemini voxel fight\Gemini-Voxel-fight\node_modules\esbuild\lib\main.js:1876:26)
+    at bundleConfigFile (file:///D:/Gemini%20voxel%20fight/Gemini-Voxel-fight/node_modules/vite/dist/node/chunks/dep-D4NMHUTW.js:49309:24)
+    at async bundleAndLoadConfigFile (file:///D:/Gemini%20voxel%20fight/Gemini-Voxel-fight/node_modules/vite/dist/node/chunks/dep-D4NMHUTW.js:49293:19)
+    at async loadConfigFromFile (file:///D:/Gemini%20voxel%20fight/Gemini-Voxel-fight/node_modules/vite/dist/node/chunks/dep-D4NMHUTW.js:49257:44)
+    at async resolveConfig (file:///D:/Gemini%20voxel%20fight/Gemini-Voxel-fight/node_modules/vite/dist/node/chunks/dep-D4NMHUTW.js:48752:24)
+    at async _createServer (file:///D:/Gemini%20voxel%20fight/Gemini-Voxel-fight/node_modules/vite/dist/node/chunks/dep-D4NMHUTW.js:38349:66)
+    at async CAC.<anonymous> (file:///D:/Gemini%20voxel%20fight/Gemini-Voxel-fight/node_modules/vite/dist/node/cli.js:753:20)[39m

@@ -41,21 +41,23 @@ export function createVisualHelpers(runtime) {
       if (opts.light || opts.lightIntensity) {
         const intensity = opts.lightIntensity ?? 3;
         const lightLife = opts.lightLife ?? 0.15;
-        light = new THREE.PointLight(color, intensity, opts.lightRange ?? 8);
-        light.position.copy(p);
-        if (typeof runtime.addLight === 'function') runtime.addLight(light);
-        else if (runtime.scene) runtime.scene.add(light);
+        const pointLight = new THREE.PointLight(color, intensity, opts.lightRange ?? 8);
+        pointLight.position.copy(p);
+        light = typeof runtime.addLight === 'function' ? runtime.addLight(pointLight) : pointLight;
+        if (!runtime.addLight && runtime.scene) runtime.scene.add(pointLight);
 
-        registerLifetime(runtime, lightLife, ({ progress }) => {
-          if (!light) return false;
-          light.intensity = intensity * (1 - progress);
-          if (progress >= 1) {
-            if (typeof runtime.removeLight === 'function') runtime.removeLight(light);
-            else if (runtime.scene) runtime.scene.remove(light);
-            return false;
-          }
-          return true;
-        });
+        if (light) {
+          registerLifetime(runtime, lightLife, ({ progress }) => {
+            if (!light) return false;
+            light.intensity = intensity * (1 - progress);
+            if (progress >= 1) {
+              if (typeof runtime.removeLight === 'function') runtime.removeLight(light);
+              else if (runtime.scene) runtime.scene.remove(light);
+              return false;
+            }
+            return true;
+          });
+        }
       }
 
       if (opts.ringRadius) {

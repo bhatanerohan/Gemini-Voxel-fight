@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
@@ -10,20 +10,49 @@
 
 <div id="crosshair"></div>
 <div id="weapon-name"></div>
-<div id="hud">WASD move | Mouse aim locomotion | Hold click fire | T forge weapon</div>
+<div id="hud">WASD move | Mouse aim locomotion | Hold click fire | Capture all 3 zones | T forge weapon | G graphics</div>
+<div id="coop-status"></div>
+<div id="fps-counter">FPS --</div>
+<div id="team-select" hidden>
+  <div id="team-select-card">
+    <div id="team-select-badge">Reactor Control</div>
+    <h1 id="team-select-title">Choose your team</h1>
+    <p id="team-select-subtitle">Pick your spawn side before entering the arena.</p>
+    <div id="team-select-actions">
+      <button type="button" class="team-select-btn blue" data-team-choice="blue">Join Blue Team</button>
+      <button type="button" class="team-select-btn red" data-team-choice="red">Join Red Team</button>
+    </div>
+  </div>
+</div>
+<div id="match-overlay" hidden>
+  <div id="match-badge"></div>
+  <div id="match-title"></div>
+  <div id="match-subtitle"></div>
+</div>
 
 <!-- Screen flash overlay -->
 <div id="screen-flash"></div>
 
-<!-- Weapon Forge -->
-<div id="forge-overlay">
-  <div id="forge-box">
-    <h2>Weapon Forge</h2>
+<div id="forge-shell" class="open">
+  <aside id="forge-panel">
+    <div class="forge-header">
+      <h2>Weapon Forge</h2>
+      <button id="forge-close" type="button" aria-label="Hide forge panel">x</button>
+    </div>
+    <div class="forge-section">
+      <div class="forge-section-title">Loadout</div>
+      <div id="forge-loadout"></div>
+    </div>
+    <div class="forge-field">
+      <span>Auto Fire Profile</span>
+      <div id="forge-cooldown" class="forge-readout" aria-live="polite">Instant: T1 0.10s | T2 1.0s | T3 4.0s | T4 20s | Continuous: T1 4.0s/0.25s | T2 3.0s/1.0s | T3 2.0s/4.0s | T4 1.0s/20s</div>
+    </div>
     <textarea id="forge-input" placeholder="Describe ANY weapon... e.g. 'a black hole cannon that sucks enemies in' or 'bouncing laser that splits on impact'"></textarea>
-    <button id="forge-btn">Forge Weapon</button>
+    <button id="forge-btn" type="button">Forge Weapon</button>
     <div id="forge-status"></div>
     <div id="forge-error"></div>
-  </div>
+  </aside>
+  <button id="forge-toggle" type="button">Hide Forge</button>
 </div>
 
 <script type="module" src="/src/main.js"></script>

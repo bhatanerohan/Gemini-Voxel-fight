@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "Bash(cd \"D:/Gemini voxel fight/Gemini-Voxel-fight\" && mkdir -p .claude/skills/web-games && curl -L -o /tmp/web-games.zip \"https://fastmcp.me/Skills/Download/655\" && unzip -o /tmp/web-games.zip -d .claude/skills/web-games && rm /tmp/web-games.zip 2>&1)",
+      "Bash(cd \"D:/Gemini voxel fight/Gemini-Voxel-fight\" && mkdir -p .claude/skills/mobile-games && curl -L -o /tmp/mobile-games.zip \"https://fastmcp.me/Skills/Download/796\" && unzip -o /tmp/mobile-games.zip -d .claude/skills/mobile-games && rm /tmp/mobile-games.zip 2>&1)",
+      "Bash(node -e \"var v0=10.5,g=28,peak=v0*v0/\\(2*g\\); console.log\\('Max jump height:',peak.toFixed\\(3\\)\\); console.log\\('From ground, max landable:',peak.toFixed\\(3\\)\\); console.log\\('From 3.5, max landable:',\\(3.5+peak\\).toFixed\\(3\\)\\); console.log\\('From 4.0, max landable:',\\(4.0+peak\\).toFixed\\(3\\)\\);\")",
+      "Bash(node -e \"console.log\\('ARENA_HALF_EXTENT=64, PLAYER_BOUNDS=62.5'\\); console.log\\('Floor size=176x176'\\); console.log\\('Playable range: -62.5 to +62.5 on X and Z'\\); console.log\\('Blue spawns: x=[-34,-16,0,16,34] z=[-44,-42,-40,-42,-44]'\\); console.log\\('Red spawns: x=[-34,-16,0,16,34] z=[44,42,40,42,44]'\\); console.log\\('Spawn separation: ~80 units on Z axis'\\); console.log\\('Arena center: \\(0,0,0\\)'\\);\")"
+    ]
+  }
+}
